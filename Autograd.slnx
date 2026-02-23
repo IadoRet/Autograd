@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Autograd.Engine/Autograd.Engine.csproj" />
+  <Project Path="Autograd/Autograd.csproj" />
+</Solution>
