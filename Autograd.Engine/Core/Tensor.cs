@@ -103,6 +103,37 @@ public class Tensor
         return result;
     }
     
+    public static Tensor operator+(Tensor t1, Tensor t2)
+    {
+        int[] shape = new int[Math.Max(t1._shape.Length, t2._shape.Length)];
+        int dim = 1;
+
+        for (int i = shape.Length - 1; i >= 0; i--)
+        {
+            int i1 = i - (shape.Length - t1._shape.Length);
+            int s1 = i1 < 0 ? 1 : t1._shape[i1];
+            int i2 = i - (shape.Length - t2._shape.Length);
+            int s2 = i2 < 0 ? 1 : t2._shape[i2];
+
+            // invalid operation, for example [5, 4] + [1, 5] (but [5, 4] + [1, 4] - valid).
+            if (s1 != s2 && (s1 != 1 || s2 != 1))
+                throw new TensorException($"Dimensions do not match. Dimension: [{i}]. Shapes: [{s1}] <=> [{s2}]");
+            
+            int max = Math.Max(s1, s2);
+            shape[i] = max;
+            dim *= max;
+        }
+
+        float[] result = new float[dim];
+
+        for (int i = 0; i < dim; i++)
+        {
+            
+        }
+
+        throw new NotImplementedException();
+    }
+    
     public void Adjust(float rate)
     {
         for (int i = 0; i < _gradients.Length; i++)
