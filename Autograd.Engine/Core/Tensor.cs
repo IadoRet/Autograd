@@ -103,17 +103,41 @@ public class Tensor
         return result;
     }
     
+    // todo: refactoring
     public static Tensor operator+(Tensor t1, Tensor t2)
     {
-        int[] shape = new int[Math.Max(t1._shape.Length, t2._shape.Length)];
+        int len = Math.Max(t1._shape.Length, t2._shape.Length);
+        
+        //Matching shapes [3, 5] + [5] => [3, 5] + [1, 5]
+        Span<int> t1Shape = stackalloc int[len];
+        Span<int> t2Shape = stackalloc int[len];
+
+        Span<int> t1Strides = stackalloc int[len];
+        Span<int> t2Strides = stackalloc int[len];
+        
+        int[] shape = new int[len];
+        
         int dim = 1;
 
         for (int i = shape.Length - 1; i >= 0; i--)
         {
             int i1 = i - (shape.Length - t1._shape.Length);
             int s1 = i1 < 0 ? 1 : t1._shape[i1];
+            t1Shape[i] = s1;
             int i2 = i - (shape.Length - t2._shape.Length);
             int s2 = i2 < 0 ? 1 : t2._shape[i2];
+            t2Shape[i] = s2;
+
+            if (i < shape.Length - 1)
+            {
+                t1Strides[i] = t1Strides[i + 1] * t1Shape[i + 1];
+                t2Strides[i] = t2Strides[i + 1] * t2Shape[i + 1];
+            }
+            else
+            {
+                t1Strides[i] = 1;
+                t2Strides[i] = 1;
+            }
 
             // invalid operation, for example [5, 4] + [1, 5] (but [5, 4] + [1, 4] - valid).
             if (s1 != s2 && (s1 != 1 || s2 != 1))
@@ -124,14 +148,42 @@ public class Tensor
             dim *= max;
         }
 
+        for (int i = 0; i < len; i++)
+        {
+            t1Strides[i] = t1Shape[i] == 1 ? 0 : t1Strides[i];
+            t2Strides[i] = t2Shape[i] == 1 ? 0 : t2Strides[i];
+        }
+
         float[] result = new float[dim];
 
         for (int i = 0; i < dim; i++)
         {
+            int c = i;
+            int c1 = 0;
+            int c2 = 0;
             
+            for (int j = len - 1; j >= 0; j--)
+            {
+                int jShape = shape[j];
+                int coord = c % jShape;
+                c /= jShape;
+                c1 += coord * t1Strides[j];
+                c2 += coord * t2Strides[j];
+            }
+            
+            result[i] = t1._data[c1] + t2._data[c2];
         }
 
-        throw new NotImplementedException();
+        Tensor o = new(result, shape, t1, t2);
+        
+        o._backward = Backward;
+
+        return o;
+
+        void Backward()
+        {
+            
+        }
     }
     
     public void Adjust(float rate)
