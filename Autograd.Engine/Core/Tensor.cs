@@ -112,8 +112,8 @@ public class Tensor
         Span<int> t1Shape = stackalloc int[len];
         Span<int> t2Shape = stackalloc int[len];
 
-        Span<int> t1Strides = stackalloc int[len];
-        Span<int> t2Strides = stackalloc int[len];
+        int[] t1Strides = new int[len];
+        int[] t2Strides = new int[len];
         
         int[] shape = new int[len];
         
@@ -182,7 +182,62 @@ public class Tensor
 
         void Backward()
         {
-            
+            for (int i = 0; i < dim; i++)
+            {
+                int c = i;
+                int c1 = 0;
+                int c2 = 0;
+    
+                for (int j = len - 1; j >= 0; j--)
+                {
+                    int coord = c % shape[j];
+                    c /= shape[j];
+                    c1 += coord * t1Strides[j];
+                    c2 += coord * t2Strides[j];
+                }
+    
+                t1._gradients[c1] += o._gradients[i];
+                t2._gradients[c2] += o._gradients[i];
+            }
+        }
+    }
+
+    public static Tensor ReLU(Tensor t)
+    {
+        int len = t._data.Length;
+        
+        float[] result = new float[len];
+        
+        for (int i = 0; i < len; i++)
+            result[i] = Math.Max(t._data[i], 0);
+        
+        // copy _shape
+        Tensor o = new(result, t._shape.ToArray(), t);
+        
+        o._backward = Backward;
+
+        return o;
+
+        void Backward()
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+    // todo: topological sort
+    public void Backward(bool recursive = false)
+    {
+        if (!recursive)
+        {
+            for (int i = 0; i < _gradients.Length; i++)
+                _gradients[i] = 1;
+        }
+        
+        _backward?.Invoke();
+        
+        foreach (Tensor tensor in _leaves) 
+        {
+            tensor.Backward(true);
         }
     }
     
@@ -190,5 +245,11 @@ public class Tensor
     {
         for (int i = 0; i < _gradients.Length; i++)
             _data[i] -= rate * _gradients[i];
+    }
+
+    public void Zero()
+    {
+        for (int i = 0; i < _gradients.Length; i++)
+            _gradients[i] = 0;
     }
 }
