@@ -220,7 +220,43 @@ public class Tensor
 
         void Backward()
         {
-            throw new NotImplementedException();
+            for (int i = 0; i < t._gradients.Length; i++)
+                t._gradients[i] += t._data[i] > 0 ? o._gradients[i] : 0;
+        }
+    }
+
+    public static Tensor MSE(Tensor p, Tensor gt)
+    {
+        if (gt._data.Length != p._data.Length)
+            throw new TensorException($"Dimensions do not match.");
+
+        float mean = 0;
+        int len = p._data.Length;
+        
+        for (int i = 0; i < len; i++)
+        {
+            float pv = p._data[i];
+            float gtv = gt._data[i];
+
+            mean += MathF.Pow(pv - gtv, 2);
+        }
+
+        Tensor o = new([mean / len], [1], p, gt);
+        
+        o._backward = Backward;
+
+        return o;
+
+        void Backward()
+        {
+            float scale = o._gradients[0] * 2f / len;
+    
+            for (int i = 0; i < len; i++)
+            {
+                float diff = p._data[i] - gt._data[i];
+                p._gradients[i] += scale * diff;
+                gt._gradients[i] -= scale * diff;
+            }
         }
     }
 
@@ -252,4 +288,6 @@ public class Tensor
         for (int i = 0; i < _gradients.Length; i++)
             _gradients[i] = 0;
     }
+
+    public float[] Raw() => _data;
 }
