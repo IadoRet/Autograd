@@ -3,33 +3,32 @@
 using Autograd.Engine.Core;
 using Autograd.MLP;
 
-Console.WriteLine("Hello, World!");
+const int epochs = 2000;
+const int dataSize = 50;
 
-Tensor t1 = new Tensor(data: [2, 2, 2, 1, 1, 1], shape: [2, 1, 3]);
-Tensor t2 = new Tensor(data: [0, 1, 0, 1, 1, 2, 3, 4, 1, 0, 0, 1, 0, 1, 0, 1, 1, 2, 3, 4, 1, 0, 0, 1], shape: [2, 3, 4]);
+MLP mlp = MLP.Create(3)
+             .WithLayer(16)
+             .WithLayer(16)
+             .WithOutput(1);
 
-Tensor t3 = t1 * t2;
-Console.WriteLine(t3);
+Random random = new (327);
 
-int epochs = 2000;
-int dataSize = 50;
-
-MLP mlp = MLP.Create(3).WithLayer(16).WithLayer(16).WithOutput(1);
-
-Random random = new Random(314);
-
+float loss = 0;
 for (int i = 0; i < epochs; i++)
 {
-    float loss = 0;
+    loss = 0;
+    (Tensor input, Tensor gt)[] trainingData = Enumerable.Range(0, dataSize)
+                                                         .Select(_ => CreateData(random))
+                                                         .ToArray();
     
-    for (int j = 0; j < dataSize; j++)
+    foreach ((Tensor input, Tensor gt) in trainingData)
     {
-        (float[] parameters, float output) = CreateData(random);
-        Tensor input = new Tensor(parameters, [1, parameters.Length]);
-        Tensor gt = new Tensor([output], [1, 1]);
         Tensor o = mlp.Forward(input);
         Tensor mse = Tensor.MSE(o, gt);
-        loss += mse.Raw()[0];
+        loss += mse.GetData().Single();
+        
+        //todo: batch learning
+        
         mse.Backward();
         mlp.Adjust(0.001f);
         mlp.Zero();
@@ -39,15 +38,26 @@ for (int i = 0; i < epochs; i++)
     Console.WriteLine($"EPOCH {i + 1}, LOSS: {loss}");
 }
 
-(float[] parameters, float output) CreateData(Random r)
+Console.WriteLine($"TRAINING FINISHED. LOSS: {loss}");
+
+var example = CreateData(random);
+var exampleOutput = mlp.Forward(example.input);
+Console.ForegroundColor = ConsoleColor.Red;
+
+Console.WriteLine($"EXAMPLE. INPUTS: {string.Join(',', example.input.GetData())}, PREDICTED: {exampleOutput.GetData().Single()}, GROUND TRUTH: {example.gt.GetData().Single()}");
+
+(Tensor input, Tensor gt) CreateData(Random r)
 {
     float a = r.NextSingle() * r.Next(-3, 3);
     float b = r.NextSingle() * r.Next(-7, 7);
     float c = r.NextSingle() * r.Next(-2, 2);
 
     float output = Fn(a, b, c);
+    
+    Tensor input = new Tensor([a, b, c], [1, 3]);
+    Tensor gt = new Tensor([output], [1, 1]);
 
-    return ([a, b, c], output);
+    return (input, gt);
 }
 
 float Fn(float a, float b, float c)

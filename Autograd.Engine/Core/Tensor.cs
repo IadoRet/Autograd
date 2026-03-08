@@ -289,5 +289,6 @@ public class Tensor
             _gradients[i] = 0;
     }
 
-    public float[] Raw() => _data;
+    // Copy tensor data
+    public float[] GetData() => _data.ToArray();
 }
