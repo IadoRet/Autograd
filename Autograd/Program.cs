@@ -11,7 +11,7 @@ MLP mlp = MLP.Create(3)
              .WithLayer(16)
              .WithOutput(1);
 
-Random random = new (327);
+Random random = new (328);
 
 float loss = 0;
 for (int i = 0; i < epochs; i++)

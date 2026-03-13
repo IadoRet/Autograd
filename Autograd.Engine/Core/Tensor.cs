@@ -260,20 +260,34 @@ public class Tensor
         }
     }
 
-    // todo: topological sort
-    public void Backward(bool recursive = false)
+    /// <summary>
+    /// Backpropagation
+    /// </summary>
+    public void Backward()
     {
-        if (!recursive)
-        {
-            for (int i = 0; i < _gradients.Length; i++)
-                _gradients[i] = 1;
-        }
+        List<Tensor> topo = [];
+        HashSet<Tensor> visited = [];
         
-        _backward?.Invoke();
+        Topo(this);
         
-        foreach (Tensor tensor in _leaves) 
+        for (int i = 0; i < _gradients.Length; i++)
+            _gradients[i] = 1;
+        
+        for (int i = topo.Count - 1; i >= 0; i--)
+            topo[i]._backward?.Invoke();
+
+        return;
+        
+        // topologic sort
+        void Topo(Tensor value)
         {
-            tensor.Backward(true);
+            if (!visited.Add(value)) 
+                return;
+            
+            foreach (Tensor leaf in value._leaves)
+                Topo(leaf);
+            
+            topo.Add(value);
         }
     }
     
