@@ -3,6 +3,10 @@ using Autograd.Engine.Core;
 
 namespace Autograd.MLP;
 
+/// <summary>
+/// Multi-layered perceptron
+/// </summary>
+// ReSharper disable once InconsistentNaming
 public class MLP
 {
     private readonly int _inputSize;

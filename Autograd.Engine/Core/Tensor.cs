@@ -2,12 +2,15 @@
 
 namespace Autograd.Engine.Core;
 
+/// <summary>
+/// Tensor
+/// </summary>
 public class Tensor
 {
     private readonly float[] _data;
     
     private readonly int[] _shape;
-    private readonly int[] _strides;
+    private readonly int[] _strides; //todo: remove?
 
     private readonly float[] _gradients;
     
@@ -28,6 +31,12 @@ public class Tensor
             _strides[i] = _strides[i + 1] * shape[i + 1];
     }
 
+    /// <summary>
+    /// Matrix multiplication
+    /// </summary>
+    /// <param name="t1">tensor 1</param>
+    /// <param name="t2">tensor 2</param>
+    /// <exception cref="TensorDimensionException">Dimension mismatch</exception>
     public static Tensor operator *(Tensor t1, Tensor t2)
     {
         // Dimensions: 
@@ -41,7 +50,7 @@ public class Tensor
         for (int i = 0; i < t1._shape.Length - 2; i++)
         {
             if (t1._shape[i] != t2._shape[i])
-                throw new TensorException($"Dimensions do not match. Dimension: [{i}].");
+                throw new TensorDimensionException($"Dimensions do not match. Dimension: [{i}].");
             
             shape[i] = t1._shape[i];
         }
@@ -60,9 +69,9 @@ public class Tensor
         void Backward()
         {
             //grad(C) * T2^T -> m x k
-            float[] t1Gradients = Multiply(o._gradients, t2._data, t1._shape, m, k, n, transposeT2: true);
+            float[] t1Gradients = Multiply(o._gradients, t2._data, t1._shape, m, k, n, tposeT2: true);
             //T1^T * grad(C) -> k x n
-            float[] t2Gradients = Multiply(t1._data, o._gradients, t2._shape, k, n, m, transposeT1: true);
+            float[] t2Gradients = Multiply(t1._data, o._gradients, t2._shape, k, n, m, tposeT1: true);
             
             for (int i = 0; i < t1Gradients.Length; i++)
                 t1._gradients[i] += t1Gradients[i];
@@ -72,7 +81,19 @@ public class Tensor
         }
     }
 
-    private static float[] Multiply(float[] t1, float[] t2, int[] shape, int m, int n, int k, bool transposeT1 = false, bool transposeT2 = false)
+    /// <summary>
+    /// Matrix multiplication
+    /// </summary>
+    /// <param name="t1">tensor 1</param>
+    /// <param name="t2">tensor 2</param>
+    /// <param name="shape">shape (should be identical)</param>
+    /// <param name="m">m</param>
+    /// <param name="n">n</param>
+    /// <param name="k">k</param>
+    /// <param name="tposeT1">transpose tensor 1</param>
+    /// <param name="tposeT2">transpose tensor 2</param>
+    // ReSharper disable once InconsistentNaming
+    private static float[] Multiply(float[] t1, float[] t2, int[] shape, int m, int n, int k, bool tposeT1 = false, bool tposeT2 = false)
     {
         int dim = shape.Aggregate(1, (a, b) => a * b);
         float[] result = new float[dim];
@@ -92,8 +113,8 @@ public class Tensor
                 {
                     for (int q = 0; q < k; q++)
                     {
-                        int t1Index = transposeT1 ?  offsetT1 + q * m + i : offsetT1 + i * k + q;
-                        int t2Index = transposeT2 ? offsetT2 + j * k + q : offsetT2 + q * n + j;
+                        int t1Index = tposeT1 ?  offsetT1 + q * m + i : offsetT1 + i * k + q;
+                        int t2Index = tposeT2 ? offsetT2 + j * k + q : offsetT2 + q * n + j;
                         result[offsetR + i * n + j] += t1[t1Index] * t2[t2Index];
                     }
                 }
@@ -103,7 +124,12 @@ public class Tensor
         return result;
     }
     
-    // todo: refactoring
+    /// <summary>
+    /// Matrix additions
+    /// </summary>
+    /// <param name="t1">tensor 1</param>
+    /// <param name="t2">tensor 2</param>
+    /// <exception cref="TensorDimensionException">Dimension mismatch</exception>
     public static Tensor operator+(Tensor t1, Tensor t2)
     {
         int len = Math.Max(t1._shape.Length, t2._shape.Length);
@@ -141,7 +167,7 @@ public class Tensor
 
             // invalid operation, for example [5, 4] + [1, 5] (but [5, 4] + [1, 4] - valid).
             if (s1 != s2 && (s1 != 1 || s2 != 1))
-                throw new TensorException($"Dimensions do not match. Dimension: [{i}]. Shapes: [{s1}] <=> [{s2}]");
+                throw new TensorDimensionException($"Dimensions do not match. Dimension: [{i}]. Shapes: [{s1}] <=> [{s2}]");
             
             int max = Math.Max(s1, s2);
             shape[i] = max;
@@ -202,6 +228,10 @@ public class Tensor
         }
     }
 
+    /// <summary>
+    /// Rectified Linear Unit
+    /// </summary>
+    /// <param name="t">tensor</param>
     public static Tensor ReLU(Tensor t)
     {
         int len = t._data.Length;
@@ -225,10 +255,18 @@ public class Tensor
         }
     }
 
+    
+    /// <summary>
+    /// Mean square error
+    /// </summary>
+    /// <param name="p">prediction</param>
+    /// <param name="gt">ground truth</param>
+    /// <exception cref="TensorDimensionException">Dimension mismatch</exception>
+    // ReSharper disable once InconsistentNaming
     public static Tensor MSE(Tensor p, Tensor gt)
     {
         if (gt._data.Length != p._data.Length)
-            throw new TensorException($"Dimensions do not match.");
+            throw new TensorDimensionException("Dimensions do not match.");
 
         float mean = 0;
         int len = p._data.Length;
@@ -268,7 +306,7 @@ public class Tensor
         List<Tensor> topo = [];
         HashSet<Tensor> visited = [];
         
-        Topo(this);
+        TopoSort(this);
         
         for (int i = 0; i < _gradients.Length; i++)
             _gradients[i] = 1;
@@ -279,24 +317,30 @@ public class Tensor
         return;
         
         // topologic sort
-        void Topo(Tensor value)
+        void TopoSort(Tensor value)
         {
             if (!visited.Add(value)) 
                 return;
             
             foreach (Tensor leaf in value._leaves)
-                Topo(leaf);
+                TopoSort(leaf);
             
             topo.Add(value);
         }
     }
     
+    /// <summary>
+    /// Adjust values according to gradients
+    /// </summary>
     public void Adjust(float rate)
     {
         for (int i = 0; i < _gradients.Length; i++)
             _data[i] -= rate * _gradients[i];
     }
 
+    /// <summary>
+    /// Zero out gradients
+    /// </summary>
     public void Zero()
     {
         for (int i = 0; i < _gradients.Length; i++)
