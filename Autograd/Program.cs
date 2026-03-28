@@ -48,6 +48,21 @@ var exampleOutput = mlp.Forward(example.input);
 Console.ForegroundColor = ConsoleColor.Red;
 
 Console.WriteLine($"EXAMPLE. INPUTS: {string.Join(',', example.input.GetData())}, PREDICTED: {exampleOutput.GetData().Single()}, GROUND TRUTH: {example.gt.GetData().Single()}");
+Console.ResetColor();
+
+// Dump for visualization
+
+const int grid = 50;
+const float range = 3f;
+
+Dump("ground_truth.json", grid, range, Fn);
+Dump("pred.json", grid, range, (a, b) =>
+{
+    Tensor input = new Tensor([a, b], [1, 2]);
+    return mlp.Forward(input).GetData().Single();
+});
+
+return;
 
 static void Dump(string path, int grid, float range, Func<float, float, float> eval)
 {
@@ -70,17 +85,6 @@ static void Dump(string path, int grid, float range, Func<float, float, float> e
     sb.Append(']');
     File.WriteAllText(path, sb.ToString());
 }
-
-int grid = 50;
-float range = 3f;
-
-Dump("ground_truth.json", grid, range, Fn);
-
-Dump("pred.json", grid, range, (a, b) =>
-{
-    Tensor input = new Tensor([a, b], [1, 2]);
-    return mlp.Forward(input).GetData().Single();
-});
 
 (Tensor input, Tensor gt) CreateData(Random r)
 {
