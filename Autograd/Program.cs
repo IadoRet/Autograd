@@ -1,14 +1,17 @@
 ﻿// See https://aka.ms/new-console-template for more information
 
+using System.Globalization;
+using System.Text;
 using Autograd.Engine.Core;
+using Autograd.Engine.Enums;
 using Autograd.MLP;
 
-const int epochs = 2000;
+const int epochs = 1000;
 const int dataSize = 50;
 
-MLP mlp = MLP.Create(3)
-             .WithLayer(16)
-             .WithLayer(16)
+MLP mlp = MLP.Create(2)
+             .WithLayer(64, ActivationType.ReLU)
+             .WithLayer(64, ActivationType.ReLU)
              .WithOutput(1);
 
 Random random = new (328);
@@ -30,7 +33,7 @@ for (int i = 0; i < epochs; i++)
         //todo: batch learning
         
         mse.Backward();
-        mlp.Adjust(0.001f);
+        mlp.Adjust(0.0005f);
         mlp.Zero();
     }
 
@@ -46,21 +49,53 @@ Console.ForegroundColor = ConsoleColor.Red;
 
 Console.WriteLine($"EXAMPLE. INPUTS: {string.Join(',', example.input.GetData())}, PREDICTED: {exampleOutput.GetData().Single()}, GROUND TRUTH: {example.gt.GetData().Single()}");
 
+static void Dump(string path, int grid, float range, Func<float, float, float> eval)
+{
+    float step = 2f * range / (grid - 1);
+    var sb = new StringBuilder();
+    sb.Append('[');
+    for (int i = 0; i < grid; i++)
+    {
+        sb.Append('[');
+        for (int j = 0; j < grid; j++)
+        {
+            float a = -range + i * step;
+            float b = -range + j * step;
+            sb.Append(eval(a, b).ToString(CultureInfo.InvariantCulture));
+            if (j < grid - 1) sb.Append(',');
+        }
+        sb.Append(']');
+        if (i < grid - 1) sb.Append(',');
+    }
+    sb.Append(']');
+    File.WriteAllText(path, sb.ToString());
+}
+
+int grid = 50;
+float range = 3f;
+
+Dump("ground_truth.json", grid, range, Fn);
+
+Dump("pred.json", grid, range, (a, b) =>
+{
+    Tensor input = new Tensor([a, b], [1, 2]);
+    return mlp.Forward(input).GetData().Single();
+});
+
 (Tensor input, Tensor gt) CreateData(Random r)
 {
-    float a = r.NextSingle() * r.Next(-3, 3);
-    float b = r.NextSingle() * r.Next(-7, 7);
-    float c = r.NextSingle() * r.Next(-2, 2);
+    float a = r.NextSingle() * 4f - 2;
+    float b = r.NextSingle() * 4f - 2;
 
-    float output = Fn(a, b, c);
+    float output = Fn(a, b);
     
-    Tensor input = new Tensor([a, b, c], [1, 3]);
+    Tensor input = new Tensor([a, b], [1, 2]);
     Tensor gt = new Tensor([output], [1, 1]);
 
     return (input, gt);
 }
 
-float Fn(float a, float b, float c)
+float Fn(float a, float b)
 {
-    return MathF.Pow(a, 3) + b + 3 * c;
+    return 3 * MathF.Pow(a, 2) + MathF.Pow(b, 2) - 5;
 }

@@ -1,4 +1,5 @@
 ﻿using Autograd.Engine.Core;
+using Autograd.Engine.Enums;
 
 namespace Autograd.MLP;
 
@@ -7,6 +8,11 @@ namespace Autograd.MLP;
 /// </summary>
 public class Layer
 {
+    /// <summary>
+    /// Activation function
+    /// </summary>
+    private readonly ActivationType? _activation;
+
     /// <summary>
     /// Weights
     /// </summary>
@@ -18,19 +24,14 @@ public class Layer
     private readonly Tensor _b;
     
     /// <summary>
-    /// Should activate? (false for output)
-    /// </summary>
-    private readonly bool _activate;
-    
-    /// <summary>
     /// Output size (amount of neurons)
     /// </summary>
     public int OutputSize { get; }
 
-    public Layer(int inputSize, int outputSize, Random random, bool activate = true)
+    public Layer(int inputSize, int outputSize, Random random, ActivationType? activation)
     {
+        _activation = activation;
         OutputSize = outputSize;
-        _activate = activate;
         int size = inputSize * outputSize;
         float[] wData = new float[size];
         float[] bData = new float[outputSize];
@@ -50,7 +51,12 @@ public class Layer
         // x * w + b
         Tensor pass = input * _w + _b;
 
-        return _activate ? Tensor.ReLU(pass) : pass;
+        return _activation switch
+        {
+            ActivationType.ReLU => Tensor.ReLU(pass),
+            ActivationType.Tanh => Tensor.TanH(pass),
+            _ => pass
+        };
     }
 
     /// <summary>

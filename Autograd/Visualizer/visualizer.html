@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Surface Comparator</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg: #fafafa; --bg2: #f0f0f0; --bg3: #fff;
+            --text: #1a1a1a; --text2: #666; --border: #ddd;
+            --accent: #4f46e5; --green: #059669; --amber: #d97706; --red: #dc2626;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #111; --bg2: #1a1a1a; --bg3: #222;
+                --text: #e5e5e5; --text2: #999; --border: #333;
+                --accent: #818cf8; --green: #34d399; --amber: #fbbf24; --red: #f87171;
+            }
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: var(--bg); color: var(--text);
+            padding: 2rem; max-width: 1200px; margin: 0 auto;
+        }
+
+        h1 { font-size: 1.4rem; font-weight: 600; margin-bottom: 1.5rem; }
+
+        .loaders {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;
+        }
+
+        .drop-zone {
+            border: 2px dashed var(--border); border-radius: 10px;
+            padding: 1.5rem; text-align: center; color: var(--text2);
+            font-size: 0.85rem; cursor: pointer; transition: all 0.2s;
+            position: relative;
+        }
+        .drop-zone:hover, .drop-zone.dragover {
+            border-color: var(--accent); background: color-mix(in srgb, var(--accent) 5%, transparent);
+        }
+        .drop-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+        .drop-zone .loaded { color: var(--green); font-weight: 600; }
+        .drop-zone .tag {
+            display: inline-block; font-size: 0.7rem; font-weight: 600; text-transform: uppercase;
+            letter-spacing: 0.05em; padding: 2px 8px; border-radius: 4px; margin-bottom: 8px;
+        }
+        .drop-zone:first-child .tag { background: color-mix(in srgb, #7c3aed 15%, transparent); color: #7c3aed; }
+        .drop-zone:last-child .tag { background: color-mix(in srgb, #ea580c 15%, transparent); color: #ea580c; }
+
+        .view-toggle {
+            display: flex; gap: 4px; background: var(--bg2); border-radius: 8px;
+            padding: 3px; margin-bottom: 8px; width: fit-content;
+        }
+        .view-toggle button {
+            border: none; background: transparent; padding: 5px 14px; border-radius: 6px;
+            font-size: 0.8rem; color: var(--text2); cursor: pointer;
+        }
+        .view-toggle button.active {
+            background: var(--bg3); box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            font-weight: 600; color: var(--text);
+        }
+
+        .stats {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px; margin-bottom: 1rem;
+        }
+        .stat-card {
+            background: var(--bg3); border: 1px solid var(--border);
+            border-radius: 10px; padding: 0.75rem 1rem;
+        }
+        .stat-card .label { font-size: 0.7rem; color: var(--text2); text-transform: uppercase; letter-spacing: 0.05em; }
+        .stat-card .value { font-size: 1.3rem; font-weight: 600; margin-top: 2px; }
+
+        .plot-container { width: 100%; height: 520px; }
+        .hidden { display: none !important; }
+
+        button.clear {
+            padding: 5px 14px; border-radius: 6px; border: 1px solid var(--border);
+            background: var(--bg); color: var(--text2); cursor: pointer; font-size: 0.8rem;
+        }
+        button.clear:hover { border-color: var(--red); color: var(--red); }
+    </style>
+</head>
+<body>
+
+<h1>Surface comparator</h1>
+
+<div class="loaders">
+    <div class="drop-zone" id="dropA">
+        <input type="file" accept=".json" data-slot="a">
+        <div class="tag">Surface A</div>
+        <div id="labelA">Drop JSON or click to load</div>
+    </div>
+    <div class="drop-zone" id="dropB">
+        <input type="file" accept=".json" data-slot="b">
+        <div class="tag">Surface B</div>
+        <div id="labelB">Drop JSON or click to load</div>
+    </div>
+</div>
+
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+    <div class="view-toggle" id="viewToggle">
+        <button class="active" data-view="overlay">Overlay</button>
+        <button data-view="sidebyside">Side by side</button>
+        <button data-view="error">Error map</button>
+    </div>
+    <button class="clear hidden" id="clearBtn">Clear all</button>
+</div>
+
+<div id="statsContainer" class="stats hidden">
+    <div class="stat-card"><div class="label">MSE</div><div class="value" id="mseVal">—</div></div>
+    <div class="stat-card"><div class="label">MAE</div><div class="value" id="maeVal">—</div></div>
+    <div class="stat-card"><div class="label">Max error</div><div class="value" id="maxErrVal">—</div></div>
+    <div class="stat-card"><div class="label">R²</div><div class="value" id="r2Val">—</div></div>
+</div>
+
+<div id="mainPlot" class="plot-container"></div>
+<div id="sidePlot" class="plot-container hidden"></div>
+
+<script>
+    const isDark = matchMedia('(prefers-color-scheme: dark)').matches;
+    const gc = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+    const tc = isDark ? '#aaa' : '#555';
+
+    const surfaces = { a: null, b: null };
+    let view = 'overlay';
+
+    function parseFile(text) {
+        const parsed = JSON.parse(text);
+        if (parsed.data && Array.isArray(parsed.data)) return parsed.data;
+        if (Array.isArray(parsed) && Array.isArray(parsed[0])) return parsed;
+        throw new Error('Expected {"data": [[...]]} or [[...]]');
+    }
+
+    function mkScene(zTitle) {
+        return {
+            xaxis: { title: 'x', gridcolor: gc, color: tc, zerolinecolor: gc },
+            yaxis: { title: 'y', gridcolor: gc, color: tc, zerolinecolor: gc },
+            zaxis: { title: zTitle || 'z', gridcolor: gc, color: tc, zerolinecolor: gc },
+            bgcolor: 'rgba(0,0,0,0)',
+            camera: { eye: { x: 1.6, y: 1.6, z: 1.1 } }
+        };
+    }
+
+    function mkLayout(title, sceneKey) {
+        const l = {
+            paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+            margin: { l: 0, r: 0, t: 40, b: 0 },
+            title: { text: title, font: { size: 14, color: tc } },
+            font: { color: tc }
+        };
+        l[sceneKey || 'scene'] = mkScene('z');
+        return l;
+    }
+
+    function buildXY(rows, cols) {
+        const xs = [], ys = [];
+        for (let i = 0; i < rows; i++) {
+            const rx = [], ry = [];
+            for (let j = 0; j < cols; j++) { rx.push(j); ry.push(i); }
+            xs.push(rx); ys.push(ry);
+        }
+        return { xs, ys };
+    }
+
+    function stats(zA, zB) {
+        let mse = 0, mae = 0, maxErr = 0, n = 0, mean = 0, ssRes = 0, ssTot = 0;
+        const rows = Math.min(zA.length, zB.length);
+        for (let i = 0; i < rows; i++)
+            for (let j = 0; j < Math.min(zA[i].length, zB[i].length); j++) { mean += zA[i][j]; n++; }
+        mean /= n;
+        n = 0;
+        for (let i = 0; i < rows; i++) {
+            for (let j = 0; j < Math.min(zA[i].length, zB[i].length); j++) {
+                const d = zA[i][j] - zB[i][j];
+                mse += d * d; mae += Math.abs(d); maxErr = Math.max(maxErr, Math.abs(d));
+                ssRes += d * d; ssTot += (zA[i][j] - mean) ** 2; n++;
+            }
+        }
+        return { mse: mse / n, mae: mae / n, maxErr, r2: 1 - ssRes / ssTot };
+    }
+
+    function colorStat(el, val, good, mid) {
+        el.textContent = val.toFixed(4);
+        el.style.color = val <= good ? 'var(--green)' : val <= mid ? 'var(--amber)' : 'var(--red)';
+    }
+
+    function render() {
+        const hasA = !!surfaces.a, hasB = !!surfaces.b;
+        const hasBoth = hasA && hasB;
+        document.getElementById('clearBtn').classList.toggle('hidden', !hasA && !hasB);
+        document.getElementById('statsContainer').classList.toggle('hidden', !hasBoth);
+
+        if (hasBoth) {
+            const s = stats(surfaces.a, surfaces.b);
+            colorStat(document.getElementById('mseVal'), s.mse, 0.1, 1);
+            colorStat(document.getElementById('maeVal'), s.mae, 0.3, 1);
+            colorStat(document.getElementById('maxErrVal'), s.maxErr, 1, 5);
+            const r2El = document.getElementById('r2Val');
+            r2El.textContent = s.r2.toFixed(4);
+            r2El.style.color = s.r2 > 0.95 ? 'var(--green)' : s.r2 > 0.8 ? 'var(--amber)' : 'var(--red)';
+        }
+
+        const mainEl = document.getElementById('mainPlot');
+        const sideEl = document.getElementById('sidePlot');
+
+        if (!hasA && !hasB) {
+            Plotly.purge(mainEl); Plotly.purge(sideEl);
+            sideEl.classList.add('hidden');
+            return;
+        }
+
+        function mkTrace(data, colorscale, name, opacity) {
+            const { xs, ys } = buildXY(data.length, data[0].length);
+            return { x: xs, y: ys, z: data, type: 'surface', colorscale, name, opacity, showscale: false };
+        }
+
+        if (view === 'overlay' || !hasBoth) {
+            sideEl.classList.add('hidden');
+            const traces = [];
+            if (hasA) traces.push(mkTrace(surfaces.a, 'Viridis', 'A', hasBoth ? 0.55 : 0.95));
+            if (hasB) traces.push(mkTrace(surfaces.b, 'Hot', 'B', hasBoth ? 0.7 : 0.95));
+            const layout = mkLayout(hasBoth ? 'A (Viridis) vs B (Hot)' : hasA ? 'Surface A' : 'Surface B');
+            layout.showlegend = hasBoth;
+            layout.legend = { font: { color: tc }, x: 0, y: 1 };
+            Plotly.react(mainEl, traces, layout, { responsive: true });
+
+        } else if (view === 'sidebyside') {
+            sideEl.classList.remove('hidden');
+            Plotly.react(mainEl, [mkTrace(surfaces.a, 'Viridis', 'A', 0.95)],
+                mkLayout('Surface A'), { responsive: true });
+            Plotly.react(sideEl, [mkTrace(surfaces.b, 'Hot', 'B', 0.95)],
+                mkLayout('Surface B'), { responsive: true });
+
+        } else if (view === 'error') {
+            sideEl.classList.add('hidden');
+            const rows = Math.min(surfaces.a.length, surfaces.b.length);
+            const zErr = [];
+            for (let i = 0; i < rows; i++) {
+                const row = [];
+                for (let j = 0; j < Math.min(surfaces.a[i].length, surfaces.b[i].length); j++)
+                    row.push(Math.abs(surfaces.a[i][j] - surfaces.b[i][j]));
+                zErr.push(row);
+            }
+            const { xs, ys } = buildXY(zErr.length, zErr[0].length);
+            const layout = mkLayout('|A − B|');
+            layout.scene.zaxis.title = '|error|';
+            Plotly.react(mainEl, [{
+                x: xs, y: ys, z: zErr, type: 'surface',
+                colorscale: [[0,'#059669'],[0.3,'#34d399'],[0.5,'#fbbf24'],[0.75,'#f87171'],[1,'#991b1b']],
+                name: 'Error', showscale: true
+            }], layout, { responsive: true });
+        }
+    }
+
+    function setupDrop(zoneId, slot, labelId) {
+        const zone = document.getElementById(zoneId);
+        const label = document.getElementById(labelId);
+        zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+        zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+        zone.addEventListener('drop', e => {
+            e.preventDefault(); zone.classList.remove('dragover');
+            const f = e.dataTransfer.files[0];
+            if (f) loadFile(f, slot, label);
+        });
+        zone.querySelector('input').addEventListener('change', e => {
+            if (e.target.files[0]) loadFile(e.target.files[0], slot, label);
+        });
+    }
+
+    function loadFile(file, slot, labelEl) {
+        file.text().then(text => {
+            try {
+                surfaces[slot] = parseFile(text);
+                const rows = surfaces[slot].length;
+                const cols = surfaces[slot][0].length;
+                labelEl.innerHTML = `<span class="loaded">${file.name}</span><br>${rows}×${cols}`;
+                render();
+            } catch (e) { alert('Parse error: ' + e.message); }
+        });
+    }
+
+    setupDrop('dropA', 'a', 'labelA');
+    setupDrop('dropB', 'b', 'labelB');
+
+    document.getElementById('viewToggle').addEventListener('click', e => {
+        const btn = e.target.closest('button[data-view]');
+        if (!btn) return;
+        document.querySelectorAll('#viewToggle button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        view = btn.dataset.view;
+        render();
+    });
+
+    document.getElementById('clearBtn').addEventListener('click', () => {
+        surfaces.a = surfaces.b = null;
+        document.getElementById('labelA').textContent = 'Drop JSON or click to load';
+        document.getElementById('labelB').textContent = 'Drop JSON or click to load';
+        render();
+    });
+</script>
+</body>
+</html>

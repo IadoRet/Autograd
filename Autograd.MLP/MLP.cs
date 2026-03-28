@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using Autograd.Engine.Core;
+using Autograd.Engine.Enums;
 
 namespace Autograd.MLP;
 
@@ -24,24 +25,24 @@ public class MLP
         return new MLP(inputSize);
     }
 
-    public MLP WithLayer(int outputSize)
+    public MLP WithLayer(int outputSize, ActivationType activation)
     {
-        AddLayer(outputSize, false);
+        AddLayer(outputSize, activation);
         
         return this;
     }
 
     public MLP WithOutput(int outputSize)
     {
-        AddLayer(outputSize, true);
+        AddLayer(outputSize);
 
         return this;
     }
 
-    private void AddLayer(int outputSize, bool final)
+    private void AddLayer(int outputSize, ActivationType? activation = null)
     {
         int previousOutputSize = _layers.Last == null ? _inputSize : _layers.Last.ValueRef.OutputSize;
-        _layers.AddLast(new Layer(previousOutputSize, outputSize, _random, !final));
+        _layers.AddLast(new Layer(previousOutputSize, outputSize, _random, activation));
     }
 
     public Tensor Forward(Tensor input)

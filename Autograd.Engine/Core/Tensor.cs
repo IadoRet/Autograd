@@ -255,6 +255,33 @@ public class Tensor
         }
     }
 
+    /// <summary>
+    /// Hyperbolic tangent
+    /// </summary>
+    /// <param name="t">tensor</param>
+    public static Tensor TanH(Tensor t)
+    {
+        int len = t._data.Length;
+        float[] result = new float[len];
+
+        for (int i = 0; i < len; i++)
+            result[i] = MathF.Tanh(t._data[i]);
+        
+        Tensor o = new(result, t._shape.ToArray(), t);
+        
+        o._backward = Backward;
+
+        return o;
+
+        void Backward()
+        {
+            for (int i = 0; i < len; i++)
+            {
+                float v = o._data[i];
+                t._gradients[i] += (1 - v * v) * o._gradients[i];
+            }
+        }
+    }
     
     /// <summary>
     /// Mean square error
@@ -349,4 +376,7 @@ public class Tensor
 
     // Copy tensor data
     public float[] GetData() => _data.ToArray();
+
+    // Copy tensor gradients
+    public float[] GetGradients() => _gradients.ToArray();
 }
