@@ -45,7 +45,10 @@ public class Tensor
         int m = t1._shape[^2];
         int n = t2._shape[^1];
         int k = t1._shape[^1];
-        
+
+        if (k != t2._shape[^2])
+            throw new TensorDimensionException($"Dimensions do not match. t1 inner dim [{k}] != t2 outer dim [{t2._shape[^2]}].");
+
         int[] shape = new int[t1._shape.Length];
         for (int i = 0; i < t1._shape.Length - 2; i++)
         {
@@ -166,7 +169,7 @@ public class Tensor
             }
 
             // invalid operation, for example [5, 4] + [1, 5] (but [5, 4] + [1, 4] - valid).
-            if (s1 != s2 && (s1 != 1 || s2 != 1))
+            if (s1 != s2 && s1 != 1 && s2 != 1)
                 throw new TensorDimensionException($"Dimensions do not match. Dimension: [{i}]. Shapes: [{s1}] <=> [{s2}]");
             
             int max = Math.Max(s1, s2);
