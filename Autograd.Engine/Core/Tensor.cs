@@ -17,6 +17,8 @@ public class Tensor
     private readonly Tensor[] _leaves;
     
     private Action? _backward;
+    
+    public static Tensor Empty => new Tensor([], []);
 
     public Tensor(float[] data, int[] shape, params Span<Tensor> leaves)
     {
@@ -230,6 +232,23 @@ public class Tensor
             }
         }
     }
+
+    /// <summary>
+    /// Tensor convolution
+    /// </summary>
+    /// <param name="t"></param>
+    /// <param name="kernel"></param>
+    /// <returns></returns>
+    public static Tensor Convolution(Tensor t, Tensor kernel)
+    {
+        int tDim = t._shape.Length;
+        int kDim = kernel._shape.Length;
+        int oDim = tDim - kDim + 1;
+
+        // todo: implement
+        return Tensor.Empty;
+    }
+
 
     /// <summary>
     /// Rectified Linear Unit
