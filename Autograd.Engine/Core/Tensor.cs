@@ -245,6 +245,16 @@ public class Tensor
         int kDim = kernel._shape.Length;
         int oDim = tDim - kDim + 1;
 
+        for (int i = 0; i < t._data.Length; i++)
+        {
+            float conv = 0f;
+            
+            for (int j = 0; j < kernel._data.Length; j++)
+            {
+                conv += t._data[i] * kernel._data[j];
+            }
+        }
+
         // todo: implement
         return Tensor.Empty;
     }
