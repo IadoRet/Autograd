@@ -241,22 +241,120 @@ public class Tensor
     /// <returns></returns>
     public static Tensor Convolution(Tensor t, Tensor kernel)
     {
-        int tDim = t._shape.Length;
-        int kDim = kernel._shape.Length;
-        int oDim = tDim - kDim + 1;
+        if (t._shape.Length < 3)
+            throw new TensorDimensionException("Convolution requires at least 3 dimensions.");
+        
+        if (t._shape.Length != kernel._shape.Length)
+            throw new TensorDimensionException("Tensor and kernel dimensions do not match.");
 
-        for (int i = 0; i < t._data.Length; i++)
+        int length = t._shape.Length;
+        
+        int batches = t._shape[0];
+        int channels = t._shape[1];
+        
+        int spatialDims = length - 2;
+
+        int[] shape = new int[length];
+        shape[0] = batches;
+        shape[1] = channels;
+
+        int oSpatSize = 1;
+        int kernelSpatSize = 1;
+        int inputSpatSize = 1;
+
+        int[] inputStrides = new int[spatialDims];
+
+        for (int i = 2; i < length; i++)
         {
-            float conv = 0f;
-            
-            for (int j = 0; j < kernel._data.Length; j++)
+            shape[i] = t._shape[i] - kernel._shape[i] + 1;
+            oSpatSize *= shape[i];
+            kernelSpatSize *= kernel._shape[i];
+            inputSpatSize *= t._shape[i];
+        }
+
+        inputStrides[spatialDims - 1] = 1;
+        for (int i = spatialDims - 2; i >= 0; i--)
+            inputStrides[i] = inputStrides[i + 1] * t._shape[i + 2];
+
+        float[] result = new float[batches * channels * oSpatSize];
+
+        for (int i = 0; i < batches; i++)
+        {
+            for (int c = 0; c < channels; c++)
             {
-                conv += t._data[i] * kernel._data[j];
+                int inputBase = (i * channels + c) * inputSpatSize;
+                int outBase = (i * channels + c) * oSpatSize;
+                int kernelBase = (i * channels + c) * kernelSpatSize;
+
+                for (int j = 0; j < oSpatSize; j++)
+                {
+                    float sum = 0;
+
+                    for (int k = 0; k < kernelSpatSize; k++)
+                    {
+                        int inputOffset = 0;
+                        int tmpOut = j;
+                        int tmpK = k;
+
+                        for (int d = spatialDims - 1; d >= 0; d--)
+                        {
+                            int oCoord = tmpOut % shape[d + 2];
+                            tmpOut /= shape[d + 2];
+                            int kCoord = tmpK % kernel._shape[d + 2];
+                            tmpK /= kernel._shape[d + 2];
+                            inputOffset += (oCoord + kCoord) * inputStrides[d];
+                        }
+
+                        sum += t._data[inputBase + inputOffset] * kernel._data[kernelBase + k];
+                    }
+
+                    result[outBase + j] = sum;
+                }
             }
         }
 
-        // todo: implement
-        return Tensor.Empty;
+        Tensor o = new(result, shape, t, kernel);
+
+        o._backward = Backward;
+
+        return o;
+
+        void Backward()
+        {
+            for (int i = 0; i < batches; i++)
+            {
+                for (int c = 0; c < channels; c++)
+                {
+                    int inputBase = (i * channels + c) * inputSpatSize;
+                    int outBase = (i * channels + c) * oSpatSize;
+                    int kernelBase = (i * channels + c) * kernelSpatSize;
+
+                    for (int j = 0; j < oSpatSize; j++)
+                    {
+                        float grad = o._gradients[outBase + j];
+
+                        for (int k = 0; k < kernelSpatSize; k++)
+                        {
+                            int inputOffset = 0;
+                            int tmpOut = j;
+                            int tmpK = k;
+
+                            for (int d = spatialDims - 1; d >= 0; d--)
+                            {
+                                int outCoord = tmpOut % shape[d + 2];
+                                tmpOut /= shape[d + 2];
+                                int kCoord = tmpK % kernel._shape[d + 2];
+                                tmpK /= kernel._shape[d + 2];
+                                inputOffset += (outCoord + kCoord) * inputStrides[d];
+                            }
+
+                            t._gradients[inputBase + inputOffset] += grad * kernel._data[kernelBase + k];
+                            kernel._gradients[kernelBase + k] += grad * t._data[inputBase + inputOffset];
+                        }
+                    }
+                }
+            }
+        }
     }
 
 
