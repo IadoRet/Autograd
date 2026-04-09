@@ -236,8 +236,8 @@ public class Tensor
     /// <summary>
     /// Tensor convolution
     /// </summary>
-    /// <param name="t"></param>
-    /// <param name="kernel"></param>
+    /// <param name="t">tensor</param>
+    /// <param name="kernel">conv. kernel</param>
     /// <returns></returns>
     public static Tensor Convolution(Tensor t, Tensor kernel)
     {
