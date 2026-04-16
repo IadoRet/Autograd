@@ -7,7 +7,7 @@ public class CnnDemo : IDemo
 {
     private const int Epochs = 1000;
     private const int SamplesPerEpoch = 32;
-    private const int ImageSize = 16;
+    private const int ImageSize = 32;
     private const float LearningRate = 0.001f;
 
     public string Name => "Convolutional Neural Network";
@@ -81,10 +81,10 @@ public class CnnDemo : IDemo
         int rectCount = r.Next(1, 4);
         for (int n = 0; n < rectCount; n++)
         {
-            int x1 = r.Next(0, ImageSize - 3);
-            int y1 = r.Next(0, ImageSize - 3);
-            int x2 = r.Next(x1 + 2, Math.Min(x1 + 10, ImageSize));
-            int y2 = r.Next(y1 + 2, Math.Min(y1 + 10, ImageSize));
+            int x1 = r.Next(0, ImageSize - 4);
+            int y1 = r.Next(0, ImageSize - 4);
+            int x2 = r.Next(x1 + 3, Math.Min(x1 + 18, ImageSize));
+            int y2 = r.Next(y1 + 3, Math.Min(y1 + 18, ImageSize));
             float intensity = 0.5f + r.NextSingle() * 0.5f;
 
             for (int y = y1; y < y2; y++)
@@ -96,9 +96,9 @@ public class CnnDemo : IDemo
         int circleCount = r.Next(1, 3);
         for (int n = 0; n < circleCount; n++)
         {
-            int cx = r.Next(3, ImageSize - 3);
-            int cy = r.Next(3, ImageSize - 3);
-            int radius = r.Next(2, 5);
+            int cx = r.Next(5, ImageSize - 5);
+            int cy = r.Next(5, ImageSize - 5);
+            int radius = r.Next(3, 9);
             float intensity = 0.5f + r.NextSingle() * 0.5f;
 
             for (int y = 0; y < ImageSize; y++)
