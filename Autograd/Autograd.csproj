@@ -9,6 +9,7 @@
 
     <ItemGroup>
       <ProjectReference Include="..\Autograd.Engine\Autograd.Engine.csproj" />
+      <ProjectReference Include="..\Autograd.CNN\Autograd.CNN.csproj" />
       <ProjectReference Include="..\Autograd.MLP\Autograd.MLP.csproj" />
     </ItemGroup>
 
