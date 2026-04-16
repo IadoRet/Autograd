@@ -517,4 +517,7 @@ public class Tensor
 
     // Copy tensor gradients
     public float[] GetGradients() => _gradients.ToArray();
+
+    // Copy tensor shape
+    public int[] GetShape() => _shape.ToArray();
 }

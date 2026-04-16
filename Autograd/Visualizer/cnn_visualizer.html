@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CNN Visualizer</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg: #fafafa; --bg2: #f0f0f0; --bg3: #fff;
+            --text: #1a1a1a; --text2: #666; --border: #ddd;
+            --accent: #4f46e5; --green: #059669; --amber: #d97706; --red: #dc2626;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #111; --bg2: #1a1a1a; --bg3: #222;
+                --text: #e5e5e5; --text2: #999; --border: #333;
+                --accent: #818cf8; --green: #34d399; --amber: #fbbf24; --red: #f87171;
+            }
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: var(--bg); color: var(--text);
+            padding: 2rem; max-width: 1200px; margin: 0 auto;
+        }
+
+        h1 { font-size: 1.4rem; font-weight: 600; margin-bottom: 1.5rem; }
+        h2 { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.75rem; color: var(--text); }
+
+        .drop-zone {
+            border: 2px dashed var(--border); border-radius: 10px;
+            padding: 1.5rem; text-align: center; color: var(--text2);
+            font-size: 0.85rem; cursor: pointer; transition: all 0.2s;
+            position: relative; margin-bottom: 1.5rem;
+        }
+        .drop-zone:hover, .drop-zone.dragover {
+            border-color: var(--accent); background: color-mix(in srgb, var(--accent) 5%, transparent);
+        }
+        .drop-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+        .drop-zone .loaded { color: var(--green); font-weight: 600; }
+
+        .section { margin-bottom: 2rem; }
+
+        .heatmaps {
+            display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem;
+        }
+        .heatmap-card {
+            background: var(--bg3); border: 1px solid var(--border);
+            border-radius: 10px; padding: 0.75rem; overflow: hidden;
+        }
+        .heatmap-card .label {
+            font-size: 0.75rem; color: var(--text2); text-transform: uppercase;
+            letter-spacing: 0.05em; margin-bottom: 4px; font-weight: 600;
+        }
+        .heatmap-plot { width: 100%; height: 300px; }
+
+        .loss-plot { width: 100%; height: 320px; }
+
+        .stats {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px; margin-bottom: 1rem;
+        }
+        .stat-card {
+            background: var(--bg3); border: 1px solid var(--border);
+            border-radius: 10px; padding: 0.75rem 1rem;
+        }
+        .stat-card .label { font-size: 0.7rem; color: var(--text2); text-transform: uppercase; letter-spacing: 0.05em; }
+        .stat-card .value { font-size: 1.3rem; font-weight: 600; margin-top: 2px; }
+
+        .error-section {
+            display: grid; grid-template-columns: 1fr auto; gap: 1rem; align-items: start;
+        }
+        .error-plot-card {
+            background: var(--bg3); border: 1px solid var(--border);
+            border-radius: 10px; padding: 0.75rem; overflow: hidden;
+        }
+        .error-plot { width: 100%; height: 300px; }
+
+        .hidden { display: none !important; }
+
+        button.clear {
+            padding: 5px 14px; border-radius: 6px; border: 1px solid var(--border);
+            background: var(--bg); color: var(--text2); cursor: pointer; font-size: 0.8rem;
+            margin-bottom: 1rem;
+        }
+        button.clear:hover { border-color: var(--red); color: var(--red); }
+    </style>
+</head>
+<body>
+
+<h1>CNN visualizer</h1>
+
+<div class="drop-zone" id="dropZone">
+    <input type="file" accept=".json">
+    <div id="dropLabel">Drop cnn_data.json or click to load</div>
+</div>
+
+<button class="clear hidden" id="clearBtn">Clear</button>
+
+<div id="content" class="hidden">
+    <div class="section">
+        <h2>Training loss</h2>
+        <div id="lossPlot" class="loss-plot"></div>
+    </div>
+
+    <div class="section">
+        <h2>Results</h2>
+        <div class="heatmaps">
+            <div class="heatmap-card">
+                <div class="label">Input</div>
+                <div id="inputPlot" class="heatmap-plot"></div>
+            </div>
+            <div class="heatmap-card">
+                <div class="label">Prediction</div>
+                <div id="predPlot" class="heatmap-plot"></div>
+            </div>
+            <div class="heatmap-card">
+                <div class="label">Ground truth</div>
+                <div id="gtPlot" class="heatmap-plot"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Error analysis</h2>
+        <div id="statsContainer" class="stats">
+            <div class="stat-card"><div class="label">MSE</div><div class="value" id="mseVal">-</div></div>
+            <div class="stat-card"><div class="label">MAE</div><div class="value" id="maeVal">-</div></div>
+            <div class="stat-card"><div class="label">Max error</div><div class="value" id="maxErrVal">-</div></div>
+        </div>
+        <div class="heatmaps" style="grid-template-columns: 1fr;">
+            <div class="heatmap-card" style="max-width: 380px;">
+                <div class="label">|Prediction - Ground truth|</div>
+                <div id="errorPlot" class="heatmap-plot"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const isDark = matchMedia('(prefers-color-scheme: dark)').matches;
+    const gc = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+    const tc = isDark ? '#aaa' : '#555';
+    const paperBg = 'rgba(0,0,0,0)';
+
+    let data = null;
+
+    function heatmapLayout(title) {
+        return {
+            paper_bgcolor: paperBg, plot_bgcolor: paperBg,
+            margin: { l: 30, r: 10, t: 30, b: 30 },
+            title: { text: title || '', font: { size: 12, color: tc } },
+            font: { color: tc },
+            xaxis: { showgrid: false, zeroline: false, color: tc },
+            yaxis: { showgrid: false, zeroline: false, autorange: 'reversed', color: tc }
+        };
+    }
+
+    function plotHeatmap(el, z, colorscale, title) {
+        Plotly.react(el, [{
+            z: z, type: 'heatmap', colorscale: colorscale || 'Greys',
+            showscale: true, zsmooth: false,
+            colorbar: { tickfont: { color: tc }, len: 0.8 }
+        }], heatmapLayout(title), { responsive: true });
+    }
+
+    function computeStats(pred, gt) {
+        let mse = 0, mae = 0, maxErr = 0, n = 0;
+        const rows = Math.min(pred.length, gt.length);
+        for (let i = 0; i < rows; i++) {
+            for (let j = 0; j < Math.min(pred[i].length, gt[i].length); j++) {
+                const d = pred[i][j] - gt[i][j];
+                mse += d * d;
+                mae += Math.abs(d);
+                maxErr = Math.max(maxErr, Math.abs(d));
+                n++;
+            }
+        }
+        return { mse: mse / n, mae: mae / n, maxErr };
+    }
+
+    function computeErrorMap(pred, gt) {
+        const rows = Math.min(pred.length, gt.length);
+        const errMap = [];
+        for (let i = 0; i < rows; i++) {
+            const row = [];
+            for (let j = 0; j < Math.min(pred[i].length, gt[i].length); j++)
+                row.push(Math.abs(pred[i][j] - gt[i][j]));
+            errMap.push(row);
+        }
+        return errMap;
+    }
+
+    function colorStat(el, val, good, mid) {
+        el.textContent = val.toFixed(4);
+        el.style.color = val <= good ? 'var(--green)' : val <= mid ? 'var(--amber)' : 'var(--red)';
+    }
+
+    function render() {
+        if (!data) return;
+        document.getElementById('content').classList.remove('hidden');
+
+        // Loss curve
+        Plotly.react('lossPlot', [{
+            y: data.lossHistory,
+            type: 'scatter', mode: 'lines',
+            line: { color: isDark ? '#818cf8' : '#4f46e5', width: 2 },
+            name: 'Loss'
+        }], {
+            paper_bgcolor: paperBg, plot_bgcolor: paperBg,
+            margin: { l: 50, r: 20, t: 20, b: 40 },
+            font: { color: tc },
+            xaxis: { title: 'Epoch', gridcolor: gc, color: tc, zerolinecolor: gc },
+            yaxis: { title: 'Loss', gridcolor: gc, color: tc, zerolinecolor: gc }
+        }, { responsive: true });
+
+        // Heatmaps
+        plotHeatmap('inputPlot', data.input, 'Greys');
+        plotHeatmap('predPlot', data.prediction, 'Greys');
+        plotHeatmap('gtPlot', data.groundTruth, 'Greys');
+
+        // Error analysis
+        const s = computeStats(data.prediction, data.groundTruth);
+        colorStat(document.getElementById('mseVal'), s.mse, 0.01, 0.1);
+        colorStat(document.getElementById('maeVal'), s.mae, 0.05, 0.2);
+        colorStat(document.getElementById('maxErrVal'), s.maxErr, 0.2, 0.5);
+
+        const errMap = computeErrorMap(data.prediction, data.groundTruth);
+        plotHeatmap('errorPlot', errMap,
+            [[0,'#059669'],[0.3,'#34d399'],[0.5,'#fbbf24'],[0.75,'#f87171'],[1,'#991b1b']]);
+    }
+
+    // File loading
+    const zone = document.getElementById('dropZone');
+    const label = document.getElementById('dropLabel');
+
+    zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+    zone.addEventListener('drop', e => {
+        e.preventDefault(); zone.classList.remove('dragover');
+        if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+    });
+    zone.querySelector('input').addEventListener('change', e => {
+        if (e.target.files[0]) loadFile(e.target.files[0]);
+    });
+
+    function loadFile(file) {
+        file.text().then(text => {
+            try {
+                data = JSON.parse(text);
+                label.innerHTML = `<span class="loaded">${file.name}</span>`;
+                document.getElementById('clearBtn').classList.remove('hidden');
+                render();
+            } catch (e) { alert('Parse error: ' + e.message); }
+        });
+    }
+
+    document.getElementById('clearBtn').addEventListener('click', () => {
+        data = null;
+        label.textContent = 'Drop cnn_data.json or click to load';
+        document.getElementById('content').classList.add('hidden');
+        document.getElementById('clearBtn').classList.add('hidden');
+        Plotly.purge('lossPlot');
+        Plotly.purge('inputPlot');
+        Plotly.purge('predPlot');
+        Plotly.purge('gtPlot');
+        Plotly.purge('errorPlot');
+    });
+</script>
+</body>
+</html>
