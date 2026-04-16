@@ -234,63 +234,71 @@ public class Tensor
     }
 
     /// <summary>
-    /// Tensor convolution
-    /// </summary>
+    /// N-dimensional convolution
+    /// For 2D case: O[b,c,y,x] = Sum_ky Sum_kx (T[b,c, y+ky, x+kx] * K[b,c, ky, kx])
     /// <param name="t">tensor</param>
-    /// <param name="kernel">conv. kernel</param>
-    /// <returns></returns>
+    /// <param name="t">convolution kernel</param>
+    /// <exception cref="TensorDimensionException">Dimension mismatch</exception>
+    /// </summary>
     public static Tensor Convolution(Tensor t, Tensor kernel)
     {
         if (t._shape.Length < 3)
             throw new TensorDimensionException("Convolution requires at least 3 dimensions.");
-        
+
         if (t._shape.Length != kernel._shape.Length)
             throw new TensorDimensionException("Tensor and kernel dimensions do not match.");
 
         int length = t._shape.Length;
-        
+
         int batches = t._shape[0];
         int channels = t._shape[1];
-        
+
+        // Number of spatial axes
         int spatialDims = length - 2;
 
         int[] shape = new int[length];
         shape[0] = batches;
         shape[1] = channels;
 
-        int oSpatSize = 1;
-        int kernelSpatSize = 1;
-        int inputSpatSize = 1;
+        // Total element counts along spatial axes
+        int outputSpatialSize = 1;
+        int kernelSpatialSize = 1;
+        int inputSpatialSize = 1;
 
         int[] inputStrides = new int[spatialDims];
 
+        // Output size per spatial axis: input_dim - kernel_dim + 1
         for (int i = 2; i < length; i++)
         {
             shape[i] = t._shape[i] - kernel._shape[i] + 1;
-            oSpatSize *= shape[i];
-            kernelSpatSize *= kernel._shape[i];
-            inputSpatSize *= t._shape[i];
+            outputSpatialSize *= shape[i];
+            kernelSpatialSize *= kernel._shape[i];
+            inputSpatialSize *= t._shape[i];
         }
 
+        // Strides for converting a flat index into N-dimensional input coordinates
         inputStrides[spatialDims - 1] = 1;
         for (int i = spatialDims - 2; i >= 0; i--)
             inputStrides[i] = inputStrides[i + 1] * t._shape[i + 2];
 
-        float[] result = new float[batches * channels * oSpatSize];
+        float[] result = new float[batches * channels * outputSpatialSize];
 
         for (int i = 0; i < batches; i++)
         {
             for (int c = 0; c < channels; c++)
             {
-                int inputBase = (i * channels + c) * inputSpatSize;
-                int outBase = (i * channels + c) * oSpatSize;
-                int kernelBase = (i * channels + c) * kernelSpatSize;
+                // Offsets to the start of the current (batch, channel) block in flat arrays
+                int inputBase = (i * channels + c) * inputSpatialSize;
+                int outBase = (i * channels + c) * outputSpatialSize;
+                int kernelBase = (i * channels + c) * kernelSpatialSize;
 
-                for (int j = 0; j < oSpatSize; j++)
+                // j = output position
+                for (int j = 0; j < outputSpatialSize; j++)
                 {
                     float sum = 0;
 
-                    for (int k = 0; k < kernelSpatSize; k++)
+                    // k = kernel element index
+                    for (int k = 0; k < kernelSpatialSize; k++)
                     {
                         int inputOffset = 0;
                         int tmpOut = j;
@@ -325,15 +333,15 @@ public class Tensor
             {
                 for (int c = 0; c < channels; c++)
                 {
-                    int inputBase = (i * channels + c) * inputSpatSize;
-                    int outBase = (i * channels + c) * oSpatSize;
-                    int kernelBase = (i * channels + c) * kernelSpatSize;
+                    int inputBase = (i * channels + c) * inputSpatialSize;
+                    int outBase = (i * channels + c) * outputSpatialSize;
+                    int kernelBase = (i * channels + c) * kernelSpatialSize;
 
-                    for (int j = 0; j < oSpatSize; j++)
+                    for (int j = 0; j < outputSpatialSize; j++)
                     {
                         float grad = o._gradients[outBase + j];
 
-                        for (int k = 0; k < kernelSpatSize; k++)
+                        for (int k = 0; k < kernelSpatialSize; k++)
                         {
                             int inputOffset = 0;
                             int tmpOut = j;
