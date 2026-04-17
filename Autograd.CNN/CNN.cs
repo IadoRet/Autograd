@@ -9,31 +9,33 @@ namespace Autograd.CNN;
 // ReSharper disable once InconsistentNaming
 public class CNN
 {
-    private readonly int _channels;
-    private LinkedList<ConvolutionLayer> _layers;
-    private Random _random = new Random();
+    private int _prevChannels;
+    private readonly LinkedList<ConvolutionLayer> _layers;
+    private readonly Random _random = new Random();
 
-    private CNN(int channels)
+    private CNN(int inChannels)
     {
-        _channels = channels;
+        _prevChannels = inChannels;
         _layers = [];
     }
 
-    public static CNN Create(int channels)
+    public static CNN Create(int inChannels)
     {
-        return new CNN(channels);
+        return new CNN(inChannels);
     }
 
-    public CNN WithLayer(int kernelSize, ActivationType activation)
+    public CNN WithLayer(int outChannels, int kernelSize, ActivationType activation)
     {
-        _layers.AddLast(new ConvolutionLayer(_channels, kernelSize, _random, activation));
+        _layers.AddLast(new ConvolutionLayer(_prevChannels, outChannels, kernelSize, _random, activation));
+        _prevChannels = outChannels;
 
         return this;
     }
 
-    public CNN WithOutput(int kernelSize)
+    public CNN WithOutput(int outChannels, int kernelSize)
     {
-        _layers.AddLast(new ConvolutionLayer(_channels, kernelSize, _random));
+        _layers.AddLast(new ConvolutionLayer(_prevChannels, outChannels, kernelSize, _random));
+        _prevChannels = outChannels;
 
         return this;
     }

@@ -1,4 +1,4 @@
-﻿using Autograd.Engine.Core;
+using Autograd.Engine.Core;
 using Autograd.Engine.Enums;
 
 namespace Autograd.CNN;
@@ -14,23 +14,23 @@ public class ConvolutionLayer
     private readonly ActivationType? _activation;
 
     /// <summary>
-    /// Kernel (filters)
+    /// Kernel (filters). Shape: [outChannels, inChannels, kernelSize, kernelSize]
     /// </summary>
     private readonly Tensor _kernel;
 
     /// <summary>
-    /// Biases
+    /// Biases. Shape: [1, outChannels, 1, 1] (broadcast over batch and spatial axes)
     /// </summary>
     private readonly Tensor _b;
 
-    public ConvolutionLayer(int channels, int kernelSize, Random random, ActivationType? activation = null)
+    public ConvolutionLayer(int inChannels, int outChannels, int kernelSize, Random random, ActivationType? activation = null)
     {
         _activation = activation;
 
-        int fanIn = channels * kernelSize * kernelSize;
+        int fanIn = inChannels * kernelSize * kernelSize;
         float stdDev = MathF.Sqrt(2f / fanIn);
 
-        int size = channels * kernelSize * kernelSize;
+        int size = outChannels * inChannels * kernelSize * kernelSize;
         float[] kernelData = new float[size];
 
         // He initialization
@@ -42,9 +42,8 @@ public class ConvolutionLayer
             kernelData[i] = z * stdDev;
         }
 
-        // kernel shape: [1, channels, kernelSize, kernelSize]
-        _kernel = new Tensor(kernelData, [1, channels, kernelSize, kernelSize]);
-        _b = new Tensor(new float[channels], [1, channels, 1, 1]);
+        _kernel = new Tensor(kernelData, [outChannels, inChannels, kernelSize, kernelSize]);
+        _b = new Tensor(new float[outChannels], [1, outChannels, 1, 1]);
     }
 
     /// <summary>

@@ -117,19 +117,20 @@ public class TensorConvolutionTests
 
     // ---- Multiple batches / channels ----
 
+    // Shared 1x1 kernel convolved over two batches independently.
     [Fact]
     public void Convolution2D_TwoBatches()
     {
-        // batch 0: all ones, batch 1: all twos
+        // batch 0: all ones, batch 1: all twos. Kernel: single 2x2 all ones.
         float[] data = Enumerable.Repeat(1f, 9).Concat(Enumerable.Repeat(2f, 9)).ToArray();
-        float[] kData = Enumerable.Repeat(1f, 4).Concat(Enumerable.Repeat(1f, 4)).ToArray();
+        float[] kData = Enumerable.Repeat(1f, 4).ToArray();
 
         var t = new Tensor(data, [2, 1, 3, 3]);
-        var k = new Tensor(kData, [2, 1, 2, 2]);
+        var k = new Tensor(kData, [1, 1, 2, 2]);
 
         float[] result = Tensor.Convolution(t, k).GetData();
 
-        // batch 0: each output = 4*1 = 4, batch 1: each output = 4*2 = 8
+        // output [2, 1, 2, 2]: batch 0 => 4*1=4, batch 1 => 4*2=8
         Assert.Equal(8, result.Length);
         for (int i = 0; i < 4; i++)
             Assert.Equal(4f, result[i], Delta);
@@ -137,24 +138,64 @@ public class TensorConvolutionTests
             Assert.Equal(8f, result[i], Delta);
     }
 
+    // Two input channels are summed into a single output channel.
     [Fact]
-    public void Convolution2D_TwoChannels()
+    public void Convolution2D_TwoInputChannels()
     {
-        // ch0: 1s, ch1: 3s
+        // ch0: 1s, ch1: 3s. Kernel [OutC=1, InC=2, 2, 2] all ones.
         float[] data = Enumerable.Repeat(1f, 9).Concat(Enumerable.Repeat(3f, 9)).ToArray();
-        float[] kData = Enumerable.Repeat(1f, 4).Concat(Enumerable.Repeat(1f, 4)).ToArray();
+        float[] kData = Enumerable.Repeat(1f, 8).ToArray();
 
         var t = new Tensor(data, [1, 2, 3, 3]);
         var k = new Tensor(kData, [1, 2, 2, 2]);
 
         float[] result = Tensor.Convolution(t, k).GetData();
 
-        Assert.Equal(8, result.Length);
-        // ch0: 4*1=4, ch1: 4*3=12
+        // output [1, 1, 2, 2]: each = (4*1) + (4*3) = 16
+        Assert.Equal(4, result.Length);
         for (int i = 0; i < 4; i++)
-            Assert.Equal(4f, result[i], Delta);
-        for (int i = 4; i < 8; i++)
-            Assert.Equal(12f, result[i], Delta);
+            Assert.Equal(16f, result[i], Delta);
+    }
+
+    // Single input channel produces two output channels via two distinct filters.
+    [Fact]
+    public void Convolution2D_TwoOutputChannels()
+    {
+        // input [1, 1, 3, 3] = 1..9
+        // kernel [OutC=2, InC=1, 2, 2]:
+        //   filter 0 = [[1,0],[0,1]]  (diagonal identity)
+        //   filter 1 = [[1,1],[1,1]]  (sum)
+        float[] data = [1f, 2f, 3f, 4f, 5f, 6f, 7f, 8f, 9f];
+        float[] kData = [1f, 0f, 0f, 1f,
+                         1f, 1f, 1f, 1f];
+
+        var t = new Tensor(data, [1, 1, 3, 3]);
+        var k = new Tensor(kData, [2, 1, 2, 2]);
+
+        float[] result = Tensor.Convolution(t, k).GetData();
+
+        // output [1, 2, 2, 2]:
+        //   out ch0 (diagonal): 1+5=6, 2+6=8, 4+8=12, 5+9=14
+        //   out ch1 (sum):      1+2+4+5=12, 2+3+5+6=16, 4+5+7+8=24, 5+6+8+9=28
+        Assert.Equal(8, result.Length);
+        Assert.Equal(6f, result[0], Delta);
+        Assert.Equal(8f, result[1], Delta);
+        Assert.Equal(12f, result[2], Delta);
+        Assert.Equal(14f, result[3], Delta);
+        Assert.Equal(12f, result[4], Delta);
+        Assert.Equal(16f, result[5], Delta);
+        Assert.Equal(24f, result[6], Delta);
+        Assert.Equal(28f, result[7], Delta);
+    }
+
+    [Fact]
+    public void Convolution_InputChannelMismatch_Throws()
+    {
+        // input has InC=2, kernel expects InC=3
+        var t = new Tensor(new float[18], [1, 2, 3, 3]);
+        var k = new Tensor(new float[12], [1, 3, 2, 2]);
+
+        Assert.Throws<TensorDimensionException>(() => Tensor.Convolution(t, k));
     }
 
     // ---- 3D convolution (shape: [N, C, D, H, W]) ----
@@ -231,6 +272,43 @@ public class TensorConvolutionTests
         Assert.Equal(24f, kGrad[2], Delta);
         // kGrad[1,1] = 5+6+8+9 = 28
         Assert.Equal(28f, kGrad[3], Delta);
+    }
+
+    // Multi output-channel backward: input grad must accumulate across all OutC.
+    [Fact]
+    public void Convolution2D_MultiOutputChannel_Backward()
+    {
+        // input [1, 1, 3, 3] = 1..9
+        // kernel [OutC=2, InC=1, 2, 2]:
+        //   filter 0 = [[1,0],[0,0]]  (top-left only)
+        //   filter 1 = [[0,0],[0,1]]  (bottom-right only)
+        var t = new Tensor([1f, 2f, 3f, 4f, 5f, 6f, 7f, 8f, 9f], [1, 1, 3, 3]);
+        var k = new Tensor([1f, 0f, 0f, 0f,
+                            0f, 0f, 0f, 1f], [2, 1, 2, 2]);
+
+        Tensor o = Tensor.Convolution(t, k);
+        o.Backward();
+
+        float[] tGrad = t.GetGradients();
+        float[] kGrad = k.GetGradients();
+
+        // grad_input = Σ_oc grad_out * kernel_sum. With grad_out all ones,
+        // grad_input[y,x] = count of (oc, outPos, kPos) triples that land at (y,x).
+        // filter 0 only contributes at offset (0,0); filter 1 only at offset (1,1).
+        float[] expectedTGrad =
+        [
+            1f, 1f, 0f, // filter 0 covers (0,0),(0,1); filter 1 doesn't reach here
+            1f, 2f, 1f, // (1,1): filter 0 at out(1,1) + filter 1 at out(0,0)
+            0f, 1f, 1f  // filter 1 covers (2,1),(2,2)
+        ];
+        for (int i = 0; i < 9; i++)
+            Assert.Equal(expectedTGrad[i], tGrad[i], Delta);
+
+        // grad_kernel[oc, 0, ky, kx] = sum of input[y+ky, x+kx] across all output positions.
+        // Same values for both oc since grad_out is uniform 1s.
+        float[] expectedKGrad = [12f, 16f, 24f, 28f, 12f, 16f, 24f, 28f];
+        for (int i = 0; i < 8; i++)
+            Assert.Equal(expectedKGrad[i], kGrad[i], Delta);
     }
 
     [Fact]

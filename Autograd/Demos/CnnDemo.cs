@@ -5,7 +5,7 @@ namespace Autograd.Demos;
 
 public class CnnDemo : IDemo
 {
-    private const int Epochs = 1000;
+    private const int Epochs = 500;
     private const int SamplesPerEpoch = 32;
     private const int ImageSize = 32;
     private const float LearningRate = 0.001f;
@@ -15,11 +15,12 @@ public class CnnDemo : IDemo
 
     public void Run()
     {
-        // Three 3x3 conv layers: 16->14->12->10
-        CNN.CNN cnn = CNN.CNN.Create(1)
-                             .WithLayer(3, ActivationType.ReLU)
-                             .WithLayer(3, ActivationType.ReLU)
-                             .WithOutput(3);
+        // Three 3x3 conv layers with channel hierarchy: 1 -> 8 -> 16 -> 1
+        // Spatial: 32 -> 30 -> 28 -> 26
+        CNN.CNN cnn = CNN.CNN.Create(inChannels: 1)
+                             .WithLayer(outChannels: 8, kernelSize: 3, ActivationType.ReLU)
+                             .WithLayer(outChannels: 16, kernelSize: 3, ActivationType.ReLU)
+                             .WithOutput(outChannels: 1, kernelSize: 3);
 
         Random random = new(42);
         float[] lossHistory = new float[Epochs];

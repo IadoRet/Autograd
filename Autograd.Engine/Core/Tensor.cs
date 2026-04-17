@@ -234,10 +234,13 @@ public class Tensor
     }
 
     /// <summary>
-    /// N-dimensional convolution
-    /// For 2D case: O[b,c,y,x] = Sum_ky Sum_kx (T[b,c, y+ky, x+kx] * K[b,c, ky, kx])
-    /// <param name="t">tensor</param>
-    /// <param name="t">convolution kernel</param>
+    /// N-dimensional convolution.
+    /// Input shape:  [B, InC, spatial_1, ..., spatial_N]
+    /// Kernel shape: [OutC, InC, k_1, ..., k_N]
+    /// Output shape: [B, OutC, spatial_i - k_i + 1, ...]
+    /// For 2D case: O[b, o, y, x] = Sum_ic Sum_ky Sum_kx (T[b, ic, y+ky, x+kx] * K[o, ic, ky, kx])
+    /// <param name="t">input tensor</param>
+    /// <param name="kernel">convolution kernel</param>
     /// <exception cref="TensorDimensionException">Dimension mismatch</exception>
     /// </summary>
     public static Tensor Convolution(Tensor t, Tensor kernel)
@@ -248,17 +251,21 @@ public class Tensor
         if (t._shape.Length != kernel._shape.Length)
             throw new TensorDimensionException("Tensor and kernel dimensions do not match.");
 
+        if (t._shape[1] != kernel._shape[1])
+            throw new TensorDimensionException($"Input channels do not match. Input: [{t._shape[1]}], kernel: [{kernel._shape[1]}].");
+
         int length = t._shape.Length;
 
         int batches = t._shape[0];
-        int channels = t._shape[1];
+        int inChannels = t._shape[1];
+        int outChannels = kernel._shape[0];
 
         // Number of spatial axes
         int spatialDims = length - 2;
 
         int[] shape = new int[length];
         shape[0] = batches;
-        shape[1] = channels;
+        shape[1] = outChannels;
 
         // Total element counts along spatial axes
         int outputSpatialSize = 1;
@@ -281,39 +288,42 @@ public class Tensor
         for (int i = spatialDims - 2; i >= 0; i--)
             inputStrides[i] = inputStrides[i + 1] * t._shape[i + 2];
 
-        float[] result = new float[batches * channels * outputSpatialSize];
+        float[] result = new float[batches * outChannels * outputSpatialSize];
 
-        for (int i = 0; i < batches; i++)
+        for (int b = 0; b < batches; b++)
         {
-            for (int c = 0; c < channels; c++)
+            for (int oc = 0; oc < outChannels; oc++)
             {
-                // Offsets to the start of the current (batch, channel) block in flat arrays
-                int inputBase = (i * channels + c) * inputSpatialSize;
-                int outBase = (i * channels + c) * outputSpatialSize;
-                int kernelBase = (i * channels + c) * kernelSpatialSize;
+                int outBase = (b * outChannels + oc) * outputSpatialSize;
 
-                // j = output position
+                // j = output spatial position
                 for (int j = 0; j < outputSpatialSize; j++)
                 {
                     float sum = 0;
 
-                    // k = kernel element index
-                    for (int k = 0; k < kernelSpatialSize; k++)
+                    // Sum over input channels and kernel positions
+                    for (int ic = 0; ic < inChannels; ic++)
                     {
-                        int inputOffset = 0;
-                        int tmpOut = j;
-                        int tmpK = k;
+                        int inputBase = (b * inChannels + ic) * inputSpatialSize;
+                        int kernelBase = (oc * inChannels + ic) * kernelSpatialSize;
 
-                        for (int d = spatialDims - 1; d >= 0; d--)
+                        for (int k = 0; k < kernelSpatialSize; k++)
                         {
-                            int oCoord = tmpOut % shape[d + 2];
-                            tmpOut /= shape[d + 2];
-                            int kCoord = tmpK % kernel._shape[d + 2];
-                            tmpK /= kernel._shape[d + 2];
-                            inputOffset += (oCoord + kCoord) * inputStrides[d];
-                        }
+                            int inputOffset = 0;
+                            int tmpOut = j;
+                            int tmpK = k;
 
-                        sum += t._data[inputBase + inputOffset] * kernel._data[kernelBase + k];
+                            for (int d = spatialDims - 1; d >= 0; d--)
+                            {
+                                int oCoord = tmpOut % shape[d + 2];
+                                tmpOut /= shape[d + 2];
+                                int kCoord = tmpK % kernel._shape[d + 2];
+                                tmpK /= kernel._shape[d + 2];
+                                inputOffset += (oCoord + kCoord) * inputStrides[d];
+                            }
+
+                            sum += t._data[inputBase + inputOffset] * kernel._data[kernelBase + k];
+                        }
                     }
 
                     result[outBase + j] = sum;
@@ -329,35 +339,39 @@ public class Tensor
 
         void Backward()
         {
-            for (int i = 0; i < batches; i++)
+            for (int b = 0; b < batches; b++)
             {
-                for (int c = 0; c < channels; c++)
+                for (int oc = 0; oc < outChannels; oc++)
                 {
-                    int inputBase = (i * channels + c) * inputSpatialSize;
-                    int outBase = (i * channels + c) * outputSpatialSize;
-                    int kernelBase = (i * channels + c) * kernelSpatialSize;
+                    int outBase = (b * outChannels + oc) * outputSpatialSize;
 
                     for (int j = 0; j < outputSpatialSize; j++)
                     {
                         float grad = o._gradients[outBase + j];
 
-                        for (int k = 0; k < kernelSpatialSize; k++)
+                        for (int ic = 0; ic < inChannels; ic++)
                         {
-                            int inputOffset = 0;
-                            int tmpOut = j;
-                            int tmpK = k;
+                            int inputBase = (b * inChannels + ic) * inputSpatialSize;
+                            int kernelBase = (oc * inChannels + ic) * kernelSpatialSize;
 
-                            for (int d = spatialDims - 1; d >= 0; d--)
+                            for (int k = 0; k < kernelSpatialSize; k++)
                             {
-                                int outCoord = tmpOut % shape[d + 2];
-                                tmpOut /= shape[d + 2];
-                                int kCoord = tmpK % kernel._shape[d + 2];
-                                tmpK /= kernel._shape[d + 2];
-                                inputOffset += (outCoord + kCoord) * inputStrides[d];
-                            }
+                                int inputOffset = 0;
+                                int tmpOut = j;
+                                int tmpK = k;
 
-                            t._gradients[inputBase + inputOffset] += grad * kernel._data[kernelBase + k];
-                            kernel._gradients[kernelBase + k] += grad * t._data[inputBase + inputOffset];
+                                for (int d = spatialDims - 1; d >= 0; d--)
+                                {
+                                    int outCoord = tmpOut % shape[d + 2];
+                                    tmpOut /= shape[d + 2];
+                                    int kCoord = tmpK % kernel._shape[d + 2];
+                                    tmpK /= kernel._shape[d + 2];
+                                    inputOffset += (outCoord + kCoord) * inputStrides[d];
+                                }
+
+                                t._gradients[inputBase + inputOffset] += grad * kernel._data[kernelBase + k];
+                                kernel._gradients[kernelBase + k] += grad * t._data[inputBase + inputOffset];
+                            }
                         }
                     }
                 }
