@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grid deformation under activations</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg: #fafafa; --bg2: #f0f0f0; --bg3: #fff;
+            --text: #1a1a1a; --text2: #666; --border: #ddd;
+            --accent: #4f46e5; --green: #059669; --amber: #d97706; --red: #dc2626;
+            --a-color: #7c3aed; --a-light: #a78bfa;
+            --b-color: #ea580c; --b-light: #fb923c;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #111; --bg2: #1a1a1a; --bg3: #222;
+                --text: #e5e5e5; --text2: #999; --border: #333;
+                --accent: #818cf8; --green: #34d399; --amber: #fbbf24; --red: #f87171;
+                --a-color: #a78bfa; --a-light: #c4b5fd;
+                --b-color: #fb923c; --b-light: #fdba74;
+            }
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: var(--bg); color: var(--text);
+            padding: 2rem; max-width: 1200px; margin: 0 auto;
+        }
+
+        h1 { font-size: 1.4rem; font-weight: 600; margin-bottom: 0.3rem; }
+        .subtitle { color: var(--text2); font-size: 0.9rem; margin-bottom: 1.5rem; }
+
+        .selectors {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;
+        }
+
+        .selector-card {
+            background: var(--bg3);
+            border: 1px solid var(--border); border-radius: 10px;
+            padding: 1rem 1.2rem;
+        }
+
+        .tag {
+            display: inline-block; font-size: 0.7rem; font-weight: 600; text-transform: uppercase;
+            letter-spacing: 0.05em; padding: 2px 8px; border-radius: 4px; margin-bottom: 10px;
+        }
+        .selector-card:nth-child(1) .tag { background: color-mix(in srgb, var(--a-color) 15%, transparent); color: var(--a-color); }
+        .selector-card:nth-child(2) .tag { background: color-mix(in srgb, var(--b-color) 15%, transparent); color: var(--b-color); }
+
+        .pill-group {
+            display: flex; gap: 3px; background: var(--bg2); border-radius: 8px;
+            padding: 3px;
+        }
+        .pill-group button {
+            flex: 1;
+            border: none; background: transparent; padding: 7px 10px; border-radius: 6px;
+            font-size: 0.85rem; color: var(--text2); cursor: pointer;
+            font-family: inherit; transition: all 0.15s;
+        }
+        .pill-group button:hover { color: var(--text); }
+        .pill-group button.active {
+            background: var(--bg3); box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            font-weight: 600; color: var(--text);
+        }
+
+        .controls-row {
+            display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;
+            gap: 1rem; flex-wrap: wrap;
+        }
+
+        .view-toggle {
+            display: flex; gap: 4px; background: var(--bg2); border-radius: 8px;
+            padding: 3px;
+        }
+        .view-toggle button {
+            border: none; background: transparent; padding: 5px 14px; border-radius: 6px;
+            font-size: 0.8rem; color: var(--text2); cursor: pointer;
+            font-family: inherit;
+        }
+        .view-toggle button.active {
+            background: var(--bg3); box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            font-weight: 600; color: var(--text);
+        }
+
+        .seed-control {
+            display: flex; align-items: center; gap: 8px;
+            font-size: 0.8rem; color: var(--text2);
+        }
+        .seed-control input {
+            width: 70px; padding: 5px 8px; border-radius: 6px; border: 1px solid var(--border);
+            background: var(--bg3); color: var(--text); font-family: inherit;
+            font-size: 0.8rem;
+        }
+        .seed-control button {
+            padding: 5px 12px; border-radius: 6px; border: 1px solid var(--border);
+            background: var(--bg3); color: var(--text); cursor: pointer;
+            font-size: 0.8rem; font-family: inherit;
+        }
+        .seed-control button:hover { border-color: var(--accent); color: var(--accent); }
+
+        .depth-control {
+            display: flex; align-items: center; justify-content: center; gap: 1.5rem;
+            padding: 0.9rem 1.5rem; background: var(--bg3); border: 1px solid var(--border);
+            border-radius: 10px; margin-bottom: 1rem;
+        }
+        .depth-control button {
+            padding: 8px 18px; border-radius: 8px; border: 1px solid var(--border);
+            background: var(--bg); color: var(--text); cursor: pointer;
+            font-size: 0.9rem; font-weight: 500; font-family: inherit;
+            transition: all 0.15s;
+        }
+        .depth-control button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+        .depth-control button:disabled { opacity: 0.3; cursor: not-allowed; }
+        .depth-control button.primary {
+            background: var(--accent); color: white; border-color: var(--accent);
+        }
+        .depth-control button.primary:hover:not(:disabled) { opacity: 0.9; color: white; }
+        .depth-control button.primary:disabled { opacity: 0.3; }
+
+        .depth-display {
+            text-align: center; min-width: 100px;
+        }
+        .depth-display .depth-label {
+            font-size: 0.7rem; color: var(--text2); text-transform: uppercase; letter-spacing: 0.05em;
+        }
+        .depth-display .depth-value {
+            font-size: 1.8rem; font-weight: 600; line-height: 1;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .stats {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px; margin-bottom: 1rem;
+        }
+        .stat-card {
+            background: var(--bg3); border: 1px solid var(--border);
+            border-radius: 10px; padding: 0.75rem 1rem;
+        }
+        .stat-card .label { font-size: 0.7rem; color: var(--text2); text-transform: uppercase; letter-spacing: 0.05em; }
+        .stat-card .value { font-size: 1.3rem; font-weight: 600; margin-top: 2px; font-variant-numeric: tabular-nums; }
+        .stat-card.a-card { border-left: 3px solid var(--a-color); }
+        .stat-card.b-card { border-left: 3px solid var(--b-color); }
+
+        .plot-container { width: 100%; height: 500px; }
+        .plots-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+        .plots-grid .plot-container { height: 460px; }
+        .hidden { display: none !important; }
+
+        @media (max-width: 700px) {
+            .selectors, .plots-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+<h1>Grid deformation under nonlinear activations</h1>
+<div class="subtitle">See how space warps layer by layer — fixed random weights, no training.</div>
+
+<div class="selectors">
+    <div class="selector-card">
+        <div class="tag">Activation A</div>
+        <div class="pill-group" data-slot="a">
+            <button class="active" data-act="relu">ReLU</button>
+            <button data-act="tanh">tanh</button>
+            <button data-act="sigmoid">sigmoid</button>
+            <button data-act="gelu">GELU</button>
+        </div>
+    </div>
+    <div class="selector-card">
+        <div class="tag">Activation B</div>
+        <div class="pill-group" data-slot="b">
+            <button data-act="relu">ReLU</button>
+            <button class="active" data-act="tanh">tanh</button>
+            <button data-act="sigmoid">sigmoid</button>
+            <button data-act="gelu">GELU</button>
+        </div>
+    </div>
+</div>
+
+<div class="controls-row">
+    <div class="view-toggle" id="viewToggle">
+        <button class="active" data-view="sidebyside">Side by side</button>
+        <button data-view="overlay">Overlay</button>
+    </div>
+    <div class="seed-control">
+        <label>Seed</label>
+        <input type="number" value="42" id="seedInput" min="0">
+        <button id="rerollBtn">Reroll</button>
+    </div>
+</div>
+
+<div class="depth-control">
+    <button id="shallowerBtn">− Layer</button>
+    <div class="depth-display">
+        <div class="depth-label">Depth</div>
+        <div class="depth-value" id="depthValue">1</div>
+    </div>
+    <button id="deeperBtn" class="primary">Dive deeper ↓</button>
+</div>
+
+<div class="stats">
+    <div class="stat-card a-card"><div class="label">Spread A (bbox area)</div><div class="value" id="areaA">—</div></div>
+    <div class="stat-card b-card"><div class="label">Spread B (bbox area)</div><div class="value" id="areaB">—</div></div>
+    <div class="stat-card"><div class="label">Mean divergence A↔B</div><div class="value" id="divVal">—</div></div>
+</div>
+
+<div id="mainPlot" class="plot-container hidden"></div>
+<div id="plotsGrid" class="plots-grid">
+    <div id="plotA" class="plot-container"></div>
+    <div id="plotB" class="plot-container"></div>
+</div>
+
+<script>
+    const isDark = matchMedia('(prefers-color-scheme: dark)').matches;
+    const gc = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+    const tc = isDark ? '#aaa' : '#555';
+
+    const A_COLOR = isDark ? '#a78bfa' : '#7c3aed';
+    const A_LIGHT = isDark ? '#c4b5fd' : '#a78bfa';
+    const B_COLOR = isDark ? '#fb923c' : '#ea580c';
+    const B_LIGHT = isDark ? '#fdba74' : '#fb923c';
+
+    const MAX_DEPTH = 12;
+    const GRID_RANGE = 2;
+    const GRID_LINES = 15;
+    const GRID_POINTS = 70;
+
+    const state = {
+        actA: 'relu', actB: 'tanh', view: 'sidebyside',
+        seed: 42, depth: 1,
+        cachedSeed: null, cachedLayers: null
+    };
+
+    const activations = {
+        relu:    x => x > 0 ? x : 0,
+        tanh:    x => Math.tanh(x),
+        sigmoid: x => 1 / (1 + Math.exp(-x)),
+        gelu:    x => 0.5 * x * (1 + Math.tanh(0.7978845608 * (x + 0.044715 * x * x * x)))
+    };
+
+    const labels = { relu: 'ReLU', tanh: 'tanh', sigmoid: 'sigmoid', gelu: 'GELU' };
+
+    function mulberry32(seed) {
+        return function() {
+            seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+            let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+            t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+            return ((t ^ t >>> 14) >>> 0) / 4294967296;
+        };
+    }
+
+    function generateLayers(seed, n) {
+        const rng = mulberry32(seed);
+        const layers = [];
+        for (let i = 0; i < n; i++) {
+            const theta = (rng() - 0.5) * Math.PI * 0.9;
+            const s1 = 0.9 + rng() * 0.6;
+            const s2 = 0.9 + rng() * 0.6;
+            const c = Math.cos(theta), s = Math.sin(theta);
+            const W = [[s1 * c, -s1 * s], [s2 * s, s2 * c]];
+            const b = [(rng() - 0.5) * 0.7, (rng() - 0.5) * 0.7];
+            layers.push({ W, b });
+        }
+        return layers;
+    }
+
+    function getLayers() {
+        if (state.cachedSeed !== state.seed || !state.cachedLayers) {
+            state.cachedLayers = generateLayers(state.seed, MAX_DEPTH);
+            state.cachedSeed = state.seed;
+        }
+        return state.cachedLayers.slice(0, state.depth);
+    }
+
+    function applyStack(x, y, layers, activation) {
+        let px = x, py = y;
+        for (const L of layers) {
+            const z1 = L.W[0][0]*px + L.W[0][1]*py + L.b[0];
+            const z2 = L.W[1][0]*px + L.W[1][1]*py + L.b[1];
+            px = activation(z1); py = activation(z2);
+        }
+        return [px, py];
+    }
+
+    function generateGridLines() {
+        const lines = [];
+        for (let i = 0; i < GRID_LINES; i++) {
+            const c = -GRID_RANGE + 2 * GRID_RANGE * i / (GRID_LINES - 1);
+            const hline = [], vline = [];
+            for (let j = 0; j < GRID_POINTS; j++) {
+                const t = -GRID_RANGE + 2 * GRID_RANGE * j / (GRID_POINTS - 1);
+                hline.push([t, c]); vline.push([c, t]);
+            }
+            lines.push({ pts: hline, type: 'h', coord: c });
+            lines.push({ pts: vline, type: 'v', coord: c });
+        }
+        return lines;
+    }
+
+    function warpGrid(lines, layers, activation) {
+        return lines.map(line => ({
+            ...line,
+            pts: line.pts.map(([x, y]) => applyStack(x, y, layers, activation))
+        }));
+    }
+
+    function linesToTraces(lines, colorH, colorV, opacity) {
+        const hx = [], hy = [], vx = [], vy = [];
+        for (const line of lines) {
+            const tgtX = line.type === 'h' ? hx : vx;
+            const tgtY = line.type === 'h' ? hy : vy;
+            if (tgtX.length > 0) { tgtX.push(null); tgtY.push(null); }
+            for (const [x, y] of line.pts) { tgtX.push(x); tgtY.push(y); }
+        }
+        return [
+            { x: hx, y: hy, type: 'scatter', mode: 'lines',
+                line: { color: colorH, width: 1.3 }, opacity,
+                hoverinfo: 'skip', showlegend: false },
+            { x: vx, y: vy, type: 'scatter', mode: 'lines',
+                line: { color: colorV, width: 1.3 }, opacity,
+                hoverinfo: 'skip', showlegend: false }
+        ];
+    }
+
+    function bboxArea(lines) {
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        for (const line of lines) for (const [x, y] of line.pts) {
+            if (x < minX) minX = x; if (x > maxX) maxX = x;
+            if (y < minY) minY = y; if (y > maxY) maxY = y;
+        }
+        return (maxX - minX) * (maxY - minY);
+    }
+
+    function meanDivergence(A, B) {
+        let sum = 0, n = 0;
+        for (let i = 0; i < A.length; i++)
+            for (let j = 0; j < A[i].pts.length; j++) {
+                const dx = A[i].pts[j][0] - B[i].pts[j][0];
+                const dy = A[i].pts[j][1] - B[i].pts[j][1];
+                sum += Math.sqrt(dx*dx + dy*dy); n++;
+            }
+        return sum / n;
+    }
+
+    function mkLayout(title) {
+        return {
+            paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+            margin: { l: 40, r: 20, t: 36, b: 36 },
+            title: { text: title, font: { size: 13, color: tc } },
+            font: { color: tc, size: 11 },
+            xaxis: { gridcolor: gc, color: tc, zerolinecolor: gc, zerolinewidth: 1,
+                scaleanchor: 'y', scaleratio: 1 },
+            yaxis: { gridcolor: gc, color: tc, zerolinecolor: gc, zerolinewidth: 1 },
+            showlegend: false
+        };
+    }
+
+    function render() {
+        const baseGrid = generateGridLines();
+        const layers = getLayers();
+        const warpedA = warpGrid(baseGrid, layers, activations[state.actA]);
+        const warpedB = warpGrid(baseGrid, layers, activations[state.actB]);
+
+        document.getElementById('areaA').textContent = bboxArea(warpedA).toFixed(3);
+        document.getElementById('areaB').textContent = bboxArea(warpedB).toFixed(3);
+        document.getElementById('divVal').textContent = meanDivergence(warpedA, warpedB).toFixed(3);
+        document.getElementById('depthValue').textContent = state.depth;
+
+        document.getElementById('shallowerBtn').disabled = state.depth <= 0;
+        document.getElementById('deeperBtn').disabled = state.depth >= MAX_DEPTH;
+
+        const mainEl = document.getElementById('mainPlot');
+        const gridEl = document.getElementById('plotsGrid');
+        const plotAEl = document.getElementById('plotA');
+        const plotBEl = document.getElementById('plotB');
+
+        const cfg = { responsive: true, displayModeBar: false };
+
+        if (state.view === 'sidebyside') {
+            mainEl.classList.add('hidden');
+            gridEl.classList.remove('hidden');
+            Plotly.react(plotAEl, linesToTraces(warpedA, A_COLOR, A_LIGHT, 0.95),
+                mkLayout(`A · ${labels[state.actA]}`), cfg);
+            Plotly.react(plotBEl, linesToTraces(warpedB, B_COLOR, B_LIGHT, 0.95),
+                mkLayout(`B · ${labels[state.actB]}`), cfg);
+        } else {
+            mainEl.classList.remove('hidden');
+            gridEl.classList.add('hidden');
+            const tA = linesToTraces(warpedA, A_COLOR, A_COLOR, 0.55);
+            const tB = linesToTraces(warpedB, B_COLOR, B_COLOR, 0.55);
+            Plotly.react(mainEl, [...tA, ...tB],
+                mkLayout(`${labels[state.actA]} (purple) vs ${labels[state.actB]} (orange)`), cfg);
+        }
+    }
+
+    document.querySelectorAll('.pill-group').forEach(group => {
+        group.addEventListener('click', e => {
+            const btn = e.target.closest('button[data-act]');
+            if (!btn) return;
+            const slot = group.dataset.slot;
+            group.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            state[slot === 'a' ? 'actA' : 'actB'] = btn.dataset.act;
+            render();
+        });
+    });
+
+    document.getElementById('viewToggle').addEventListener('click', e => {
+        const btn = e.target.closest('button[data-view]');
+        if (!btn) return;
+        document.querySelectorAll('#viewToggle button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        state.view = btn.dataset.view;
+        render();
+    });
+
+    document.getElementById('shallowerBtn').addEventListener('click', () => {
+        if (state.depth > 0) { state.depth--; render(); }
+    });
+    document.getElementById('deeperBtn').addEventListener('click', () => {
+        if (state.depth < MAX_DEPTH) { state.depth++; render(); }
+    });
+
+    document.getElementById('seedInput').addEventListener('change', e => {
+        state.seed = parseInt(e.target.value) || 0;
+        state.cachedLayers = null;
+        render();
+    });
+    document.getElementById('rerollBtn').addEventListener('click', () => {
+        state.seed = Math.floor(Math.random() * 10000);
+        document.getElementById('seedInput').value = state.seed;
+        state.cachedLayers = null;
+        render();
+    });
+
+    render();
+</script>
+</body>
+</html>
