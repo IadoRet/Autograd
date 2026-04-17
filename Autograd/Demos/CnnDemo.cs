@@ -9,6 +9,7 @@ public class CnnDemo : IDemo
     private const int SamplesPerEpoch = 32;
     private const int ImageSize = 32;
     private const float LearningRate = 0.001f;
+    private const int DecayHalfLifeEpochs = 200;
 
     public string Name => "Convolutional Neural Network";
 
@@ -26,6 +27,7 @@ public class CnnDemo : IDemo
         for (int epoch = 0; epoch < Epochs; epoch++)
         {
             float epochLoss = 0;
+            float lr = LearningRate; // todo: decay ?
 
             for (int s = 0; s < SamplesPerEpoch; s++)
             {
@@ -42,13 +44,13 @@ public class CnnDemo : IDemo
                 epochLoss += mse.GetData()[0];
 
                 mse.Backward();
-                cnn.Adjust(LearningRate);
+                cnn.Adjust(lr);
                 cnn.Zero();
             }
 
             epochLoss /= SamplesPerEpoch;
             lossHistory[epoch] = epochLoss;
-            Console.WriteLine($"EPOCH {epoch + 1}, LOSS: {epochLoss}");
+            Console.WriteLine($"EPOCH {epoch + 1}, LOSS: {epochLoss}, LR: {lr}");
         }
 
         Console.WriteLine($"TRAINING FINISHED. LOSS: {lossHistory[^1]}");

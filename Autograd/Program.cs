@@ -1,6 +1,9 @@
 using Autograd.Demos;
 
-IDemo[] demos = [new MlpDemo(), new CnnDemo()];
+IDemo[] demos = [
+    //new MlpDemo(), 
+    new CnnDemo()
+];
 
 foreach (IDemo demo in demos)
 {

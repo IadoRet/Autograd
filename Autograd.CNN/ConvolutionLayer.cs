@@ -27,11 +27,20 @@ public class ConvolutionLayer
     {
         _activation = activation;
 
+        int fanIn = channels * kernelSize * kernelSize;
+        float stdDev = MathF.Sqrt(2f / fanIn);
+
         int size = channels * kernelSize * kernelSize;
         float[] kernelData = new float[size];
 
+        // He initialization
         for (int i = 0; i < size; i++)
-            kernelData[i] = random.NextSingle() * 2 - 1;
+        {
+            float u1 = 1f - random.NextSingle();
+            float u2 = random.NextSingle();
+            float z = MathF.Sqrt(-2f * MathF.Log(u1)) * MathF.Cos(2f * MathF.PI * u2);
+            kernelData[i] = z * stdDev;
+        }
 
         // kernel shape: [1, channels, kernelSize, kernelSize]
         _kernel = new Tensor(kernelData, [1, channels, kernelSize, kernelSize]);
