@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Convolution</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg: #fafafa; --bg2: #f0f0f0; --bg3: #fff;
+            --text: #1a1a1a; --text2: #666; --border: #ddd;
+            --accent: #4f46e5; --green: #059669; --amber: #d97706; --red: #dc2626;
+            --purple: #7c3aed; --orange: #ea580c;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #111; --bg2: #1a1a1a; --bg3: #222;
+                --text: #e5e5e5; --text2: #999; --border: #333;
+                --accent: #818cf8; --green: #34d399; --amber: #fbbf24; --red: #f87171;
+                --purple: #a78bfa; --orange: #fb923c;
+            }
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: var(--bg); color: var(--text);
+            padding: 2rem; max-width: 1200px; margin: 0 auto;
+        }
+
+        h1 { font-size: 1.4rem; font-weight: 600; margin-bottom: 1.5rem; }
+
+        /* Drop zone */
+        .drop-zone {
+            border: 2px dashed var(--border); border-radius: 10px;
+            padding: 1.5rem; text-align: center; color: var(--text2);
+            font-size: 0.85rem; cursor: pointer; transition: all 0.2s;
+            position: relative; margin-bottom: 1.5rem;
+        }
+        .drop-zone:hover, .drop-zone.dragover {
+            border-color: var(--accent);
+            background: color-mix(in srgb, var(--accent) 5%, transparent);
+        }
+        .drop-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+        .drop-zone .loaded { color: var(--green); font-weight: 600; }
+
+        /* Tag chips (shared) */
+        .tag {
+            display: inline-block; font-size: 0.7rem; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.05em;
+            padding: 2px 8px; border-radius: 4px; margin-bottom: 8px;
+        }
+        .tag.accent { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); }
+        .tag.source { background: color-mix(in srgb, var(--purple) 15%, transparent); color: var(--purple); }
+        .tag.result { background: color-mix(in srgb, var(--orange) 15%, transparent); color: var(--orange); }
+
+        /* Pill toggle (used for Animate/Instant actions) */
+        .view-toggle {
+            display: flex; gap: 4px; background: var(--bg2); border-radius: 8px;
+            padding: 3px; width: fit-content;
+        }
+        .view-toggle button {
+            border: none; background: transparent; padding: 5px 14px; border-radius: 6px;
+            font-size: 0.8rem; color: var(--text2); cursor: pointer;
+            font-family: inherit; transition: all 0.15s;
+        }
+        .view-toggle button:hover { color: var(--text); }
+        .view-toggle button.active {
+            background: var(--bg3); box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            font-weight: 600; color: var(--text);
+        }
+
+        .controls-row {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 1rem; gap: 1rem; flex-wrap: wrap;
+        }
+
+        /* Stat cards */
+        .stats {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px; margin-bottom: 1rem;
+        }
+        .stat-card {
+            background: var(--bg3); border: 1px solid var(--border);
+            border-radius: 10px; padding: 0.75rem 1rem;
+        }
+        .stat-card .label {
+            font-size: 0.7rem; color: var(--text2);
+            text-transform: uppercase; letter-spacing: 0.05em;
+        }
+        .stat-card .value {
+            font-size: 1.3rem; font-weight: 600; margin-top: 2px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* Layout: sidebar + canvases */
+        .layout { display: grid; grid-template-columns: 260px 1fr; gap: 1rem; }
+        @media (max-width: 820px) { .layout { grid-template-columns: 1fr; } }
+
+        .panel {
+            background: var(--bg3); border: 1px solid var(--border);
+            border-radius: 10px; padding: 1rem;
+        }
+        .panel h3 {
+            font-size: 0.7rem; font-weight: 600; color: var(--text2);
+            text-transform: uppercase; letter-spacing: 0.05em;
+            margin-bottom: 0.75rem;
+        }
+        .panel h3:not(:first-child) { margin-top: 1.25rem; }
+
+        /* Kernel size tabs — same pill toggle as above */
+        .size-tabs {
+            display: flex; gap: 4px; background: var(--bg2); border-radius: 8px;
+            padding: 3px;
+        }
+        .size-tabs button {
+            flex: 1; border: none; background: transparent; padding: 5px 12px;
+            border-radius: 6px; font-size: 0.8rem; color: var(--text2); cursor: pointer;
+            font-family: inherit; transition: all 0.15s;
+        }
+        .size-tabs button.active {
+            background: var(--bg3); box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            font-weight: 600; color: var(--text);
+        }
+
+        .kernel-grid {
+            display: grid; gap: 4px; margin: 0 auto;
+            max-width: 220px;
+        }
+        .kernel-grid input {
+            width: 100%; height: 34px;
+            background: var(--bg); color: var(--text); border: 1px solid var(--border);
+            text-align: center;
+            font-family: 'SF Mono', Menlo, Consolas, monospace; font-size: 0.8rem;
+            border-radius: 6px;
+            font-variant-numeric: tabular-nums;
+        }
+        .kernel-grid input:focus {
+            outline: none; border-color: var(--accent);
+        }
+
+        .param-row {
+            display: flex; align-items: center; gap: 8px; font-size: 0.8rem;
+            margin-bottom: 6px;
+        }
+        .param-row label { width: 70px; color: var(--text2); }
+        .param-row input {
+            flex: 1; background: var(--bg); color: var(--text); border: 1px solid var(--border);
+            padding: 5px 8px; border-radius: 6px;
+            font-family: 'SF Mono', Menlo, monospace; font-size: 0.8rem;
+        }
+        .param-row input:focus { outline: none; border-color: var(--accent); }
+
+        .presets {
+            display: flex; flex-direction: column; gap: 4px;
+            max-height: 280px; overflow-y: auto;
+        }
+        .presets button {
+            text-align: left; font-size: 0.8rem; padding: 6px 10px;
+            border: 1px solid var(--border); background: var(--bg);
+            color: var(--text); border-radius: 6px; cursor: pointer;
+            font-family: inherit; transition: all 0.15s;
+        }
+        .presets button:hover {
+            border-color: var(--accent); color: var(--accent);
+            background: color-mix(in srgb, var(--accent) 5%, transparent);
+        }
+
+        /* Canvas area */
+        .canvases {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1rem;
+        }
+        .canvas-box {
+            background: var(--bg3); border: 1px solid var(--border);
+            border-radius: 10px; padding: 1rem;
+        }
+        .canvas-wrap {
+            position: relative; display: inline-block;
+            border-radius: 6px; overflow: hidden;
+            background:
+                    linear-gradient(45deg, var(--bg2) 25%, transparent 25%),
+                    linear-gradient(-45deg, var(--bg2) 25%, transparent 25%),
+                    linear-gradient(45deg, transparent 75%, var(--bg2) 75%),
+                    linear-gradient(-45deg, transparent 75%, var(--bg2) 75%);
+            background-size: 16px 16px;
+            background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
+            background-color: var(--bg);
+            border: 1px solid var(--border);
+            max-width: 100%;
+        }
+        canvas { display: block; max-width: 100%; height: auto; }
+        .highlight {
+            position: absolute; pointer-events: none;
+            border: 2px solid var(--amber);
+            background: color-mix(in srgb, var(--amber) 18%, transparent);
+            box-shadow: 0 0 0 1px rgba(0,0,0,0.4), 0 0 10px color-mix(in srgb, var(--amber) 50%, transparent);
+        }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+<h1>Image convolution</h1>
+
+<div class="drop-zone" id="dropZone">
+    <input type="file" accept="image/*" id="fileInput">
+    <div class="tag accent">Source image</div>
+    <div id="dropLabel">Drop an image or click to load</div>
+</div>
+
+<div class="controls-row">
+    <div class="view-toggle" id="actionToggle">
+        <button data-action="animate">▶ Animate</button>
+        <button data-action="instant">⚡ Instant</button>
+    </div>
+</div>
+
+<div id="statsContainer" class="stats hidden">
+    <div class="stat-card"><div class="label">Input</div><div class="value" id="inputSize">—</div></div>
+    <div class="stat-card"><div class="label">Output</div><div class="value" id="outputSize">—</div></div>
+    <div class="stat-card"><div class="label">Kernel sum</div><div class="value" id="kernelSum">—</div></div>
+    <div class="stat-card"><div class="label">Progress</div><div class="value" id="progress">—</div></div>
+</div>
+
+<div class="layout">
+    <div class="panel">
+        <h3>Kernel size</h3>
+        <div class="size-tabs">
+            <button class="active" onclick="setKernelSize(3)" id="size3">3 × 3</button>
+            <button onclick="setKernelSize(5)" id="size5">5 × 5</button>
+        </div>
+
+        <h3>Values</h3>
+        <div id="kernelGrid" class="kernel-grid"></div>
+
+        <div style="margin-top: 0.75rem;">
+            <div class="param-row">
+                <label>divisor</label>
+                <input type="number" id="divisor" value="1" step="any">
+            </div>
+            <div class="param-row">
+                <label>bias</label>
+                <input type="number" id="bias" value="0" step="any">
+            </div>
+        </div>
+
+        <h3>Presets</h3>
+        <div class="presets" id="presets"></div>
+    </div>
+
+    <div class="canvases">
+        <div class="canvas-box">
+            <span class="tag source">Source</span>
+            <div class="canvas-wrap">
+                <canvas id="srcCanvas"></canvas>
+                <div class="highlight" id="highlight" style="display:none;"></div>
+            </div>
+        </div>
+
+        <div class="canvas-box">
+            <span class="tag result">Result</span>
+            <div class="canvas-wrap">
+                <canvas id="dstCanvas"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- State ---
+    let kernelSize = 3;
+    let kernel = [[0,0,0],[0,1,0],[0,0,0]];
+    let divisor = 1;
+    let bias = 0;
+    const STEP = 50; // pixels per frame during animation
+
+    const srcCanvas = document.getElementById('srcCanvas');
+    const dstCanvas = document.getElementById('dstCanvas');
+    const srcCtx = srcCanvas.getContext('2d');
+    const dstCtx = dstCanvas.getContext('2d');
+
+    let sourceData = null;
+    let resultData = null;
+    let displayData = null;
+    let currentStep = 0;
+    let totalSteps = 0;
+    let isAnimating = false;
+
+    let imgW = 0, imgH = 0;
+    let outW = 0, outH = 0;
+
+    // --- Presets ---
+    const presets = {
+        'Identity':          { k:[[0,0,0],[0,1,0],[0,0,0]],                    d:1,   b:0    },
+        'Box blur':          { k:[[1,1,1],[1,1,1],[1,1,1]],                    d:9,   b:0    },
+        'Gaussian 3×3':      { k:[[1,2,1],[2,4,2],[1,2,1]],                    d:16,  b:0    },
+        'Gaussian 5×5':      { k:[[1,4,6,4,1],[4,16,24,16,4],[6,24,36,24,6],[4,16,24,16,4],[1,4,6,4,1]], d:256, b:0 },
+        'Sharpen':           { k:[[0,-1,0],[-1,5,-1],[0,-1,0]],                d:1,   b:0    },
+        'Unsharp 5×5':       { k:[[-1,-4,-6,-4,-1],[-4,-16,-24,-16,-4],[-6,-24,476,-24,-6],[-4,-16,-24,-16,-4],[-1,-4,-6,-4,-1]], d:256, b:0 },
+        'Laplacian':         { k:[[0,-1,0],[-1,4,-1],[0,-1,0]],                d:1,   b:0    },
+        'Edge (all dirs)':   { k:[[-1,-1,-1],[-1,8,-1],[-1,-1,-1]],            d:1,   b:0    },
+        'Outline':           { k:[[-1,-1,-1],[-1,9,-1],[-1,-1,-1]],            d:1,   b:-128 },
+        'Sobel X':           { k:[[-1,0,1],[-2,0,2],[-1,0,1]],                 d:1,   b:128  },
+        'Sobel Y':           { k:[[-1,-2,-1],[0,0,0],[1,2,1]],                 d:1,   b:128  },
+        'Scharr X':          { k:[[-3,0,3],[-10,0,10],[-3,0,3]],               d:1,   b:128  },
+        'Prewitt X':         { k:[[-1,0,1],[-1,0,1],[-1,0,1]],                 d:1,   b:128  },
+        'Emboss':            { k:[[-2,-1,0],[-1,1,1],[0,1,2]],                 d:1,   b:128  },
+        'Emboss strong':     { k:[[-4,-2,0],[-2,1,2],[0,2,4]],                 d:1,   b:128  },
+        'Motion blur ↘':     { k:[[1,0,0,0,0],[0,1,0,0,0],[0,0,1,0,0],[0,0,0,1,0],[0,0,0,0,1]], d:5, b:0 },
+        'Motion blur ↗':     { k:[[0,0,0,0,1],[0,0,0,1,0],[0,0,1,0,0],[0,1,0,0,0],[1,0,0,0,0]], d:5, b:0 },
+        'Horizontal blur':   { k:[[0,0,0,0,0],[0,0,0,0,0],[1,1,1,1,1],[0,0,0,0,0],[0,0,0,0,0]], d:5, b:0 },
+        'High pass':         { k:[[-1,-1,-1,-1,-1],[-1,-1,-1,-1,-1],[-1,-1,24,-1,-1],[-1,-1,-1,-1,-1],[-1,-1,-1,-1,-1]], d:1, b:128 },
+        'LoG 5×5':           { k:[[0,0,-1,0,0],[0,-1,-2,-1,0],[-1,-2,16,-2,-1],[0,-1,-2,-1,0],[0,0,-1,0,0]], d:1, b:128 },
+    };
+
+    function renderPresets() {
+        const pc = document.getElementById('presets');
+        pc.innerHTML = '';
+        Object.keys(presets).forEach(name => {
+            const b = document.createElement('button');
+            b.textContent = name;
+            b.onclick = () => applyPreset(name);
+            pc.appendChild(b);
+        });
+    }
+
+    function applyPreset(name) {
+        const p = presets[name];
+        kernelSize = p.k.length;
+        kernel = p.k.map(r => [...r]);
+        divisor = p.d;
+        bias = p.b;
+        document.getElementById('divisor').value = divisor;
+        document.getElementById('bias').value = bias;
+        document.getElementById('size3').classList.toggle('active', kernelSize === 3);
+        document.getElementById('size5').classList.toggle('active', kernelSize === 5);
+        renderKernelInputs();
+        recompute();
+        showInstant();
+    }
+
+    // --- Kernel controls ---
+    function setKernelSize(n) {
+        kernelSize = n;
+        kernel = [];
+        const c = Math.floor(n/2);
+        for (let i = 0; i < n; i++) kernel.push(new Array(n).fill(0));
+        kernel[c][c] = 1;
+        document.getElementById('size3').classList.toggle('active', n === 3);
+        document.getElementById('size5').classList.toggle('active', n === 5);
+        renderKernelInputs();
+        recompute();
+        showInstant();
+    }
+
+    function renderKernelInputs() {
+        const g = document.getElementById('kernelGrid');
+        g.innerHTML = '';
+        g.style.gridTemplateColumns = `repeat(${kernelSize}, 1fr)`;
+        for (let y = 0; y < kernelSize; y++) {
+            for (let x = 0; x < kernelSize; x++) {
+                const inp = document.createElement('input');
+                inp.type = 'number';
+                inp.step = 'any';
+                inp.value = kernel[y][x];
+                inp.oninput = () => {
+                    kernel[y][x] = parseFloat(inp.value) || 0;
+                    recompute();
+                    showInstant();
+                };
+                g.appendChild(inp);
+            }
+        }
+    }
+
+    document.getElementById('divisor').oninput = (e) => {
+        divisor = parseFloat(e.target.value) || 1;
+        recompute();
+        showInstant();
+    };
+    document.getElementById('bias').oninput = (e) => {
+        bias = parseFloat(e.target.value) || 0;
+        recompute();
+        showInstant();
+    };
+
+    // --- Stats display ---
+    function updateStats() {
+        const container = document.getElementById('statsContainer');
+        if (!sourceData) { container.classList.add('hidden'); return; }
+        container.classList.remove('hidden');
+
+        document.getElementById('inputSize').textContent = `${imgW} × ${imgH}`;
+        document.getElementById('outputSize').textContent = `${outW} × ${outH}`;
+
+        // Kernel sum (effective net gain = sum of weights / divisor)
+        let sum = 0;
+        for (const row of kernel) for (const v of row) sum += v;
+        const eff = sum / (divisor || 1);
+        const sumEl = document.getElementById('kernelSum');
+        sumEl.textContent = eff.toFixed(3);
+        if (Math.abs(eff - 1) < 0.01)       sumEl.style.color = 'var(--green)';  // brightness-preserving
+        else if (Math.abs(eff) < 0.01)      sumEl.style.color = 'var(--amber)';  // zero-sum (edge-detecting)
+        else                                sumEl.style.color = 'var(--text)';   // neutral
+
+        document.getElementById('progress').textContent =
+            totalSteps ? `${((currentStep / totalSteps) * 100).toFixed(0)}%` : '—';
+    }
+
+    // --- Drag & drop image loading ---
+    const dropZone = document.getElementById('dropZone');
+    const dropLabel = document.getElementById('dropLabel');
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', e => {
+        e.preventDefault(); dropZone.classList.remove('dragover');
+        const f = e.dataTransfer.files[0];
+        if (f) loadFile(f);
+    });
+    document.getElementById('fileInput').addEventListener('change', e => {
+        if (e.target.files[0]) loadFile(e.target.files[0]);
+    });
+
+    function loadFile(file) {
+        const r = new FileReader();
+        r.onload = () => {
+            const img = new Image();
+            img.onload = () => {
+                loadImage(img);
+                dropLabel.innerHTML = `<span class="loaded">${file.name}</span> · ${imgW} × ${imgH}`;
+            };
+            img.src = r.result;
+        };
+        r.readAsDataURL(file);
+    }
+
+    function loadImage(img) {
+        // Downscale large images for reasonable compute times
+        const maxDim = 400;
+        let w = img.width, h = img.height;
+        if (w > maxDim || h > maxDim) {
+            const s = maxDim / Math.max(w, h);
+            w = Math.round(w * s);
+            h = Math.round(h * s);
+        }
+        imgW = w; imgH = h;
+        srcCanvas.width = w; srcCanvas.height = h;
+        srcCtx.drawImage(img, 0, 0, w, h);
+        sourceData = srcCtx.getImageData(0, 0, w, h);
+        recompute();
+        showInstant();
+    }
+
+    // --- Convolution (no padding, cross-correlation) ---
+    function recompute() {
+        if (!sourceData) return;
+        isAnimating = false;
+
+        outW = imgW - kernelSize + 1;
+        outH = imgH - kernelSize + 1;
+        if (outW <= 0 || outH <= 0) {
+            updateStats();
+            return;
+        }
+        dstCanvas.width = outW;
+        dstCanvas.height = outH;
+
+        resultData = dstCtx.createImageData(outW, outH);
+        const src = sourceData.data;
+        const dst = resultData.data;
+        const srcW = imgW;
+        const div = divisor || 1;
+
+        for (let y = 0; y < outH; y++) {
+            for (let x = 0; x < outW; x++) {
+                let r = 0, g = 0, b = 0;
+                for (let ky = 0; ky < kernelSize; ky++) {
+                    for (let kx = 0; kx < kernelSize; kx++) {
+                        const idx = ((y + ky) * srcW + (x + kx)) * 4;
+                        const w = kernel[ky][kx];
+                        r += src[idx]     * w;
+                        g += src[idx + 1] * w;
+                        b += src[idx + 2] * w;
+                    }
+                }
+                r = r / div + bias;
+                g = g / div + bias;
+                b = b / div + bias;
+                const dIdx = (y * outW + x) * 4;
+                dst[dIdx    ] = r < 0 ? 0 : r > 255 ? 255 : r;
+                dst[dIdx + 1] = g < 0 ? 0 : g > 255 ? 255 : g;
+                dst[dIdx + 2] = b < 0 ? 0 : b > 255 ? 255 : b;
+                dst[dIdx + 3] = 255;
+            }
+        }
+
+        totalSteps = outW * outH;
+        currentStep = 0;
+        updateStats();
+    }
+
+    // --- Highlight box on source ---
+    function updateHighlight() {
+        const hl = document.getElementById('highlight');
+        if (!sourceData || !isAnimating || currentStep >= totalSteps) {
+            hl.style.display = 'none';
+            return;
+        }
+        const x = currentStep % outW;
+        const y = Math.floor(currentStep / outW);
+        // Scale highlight to account for CSS-scaled canvas
+        const scale = srcCanvas.clientWidth / imgW;
+        hl.style.display = 'block';
+        hl.style.left   = (x * scale) + 'px';
+        hl.style.top    = (y * scale) + 'px';
+        hl.style.width  = (kernelSize * scale) + 'px';
+        hl.style.height = (kernelSize * scale) + 'px';
+    }
+
+    // --- Animation loop ---
+    function tick() {
+        if (!isAnimating || !resultData) return;
+        for (let s = 0; s < STEP && currentStep < totalSteps; s++) {
+            const idx = currentStep * 4;
+            displayData.data[idx    ] = resultData.data[idx    ];
+            displayData.data[idx + 1] = resultData.data[idx + 1];
+            displayData.data[idx + 2] = resultData.data[idx + 2];
+            displayData.data[idx + 3] = 255;
+            currentStep++;
+        }
+        dstCtx.putImageData(displayData, 0, 0);
+        updateHighlight();
+        updateStats();
+
+        if (currentStep >= totalSteps) {
+            isAnimating = false;
+            updateHighlight();
+        } else {
+            requestAnimationFrame(tick);
+        }
+    }
+
+    // --- Actions ---
+    function showAnimate() {
+        if (!resultData) return;
+        displayData = dstCtx.createImageData(outW, outH);
+        currentStep = 0;
+        dstCtx.clearRect(0, 0, outW, outH);
+        dstCtx.putImageData(displayData, 0, 0);
+        isAnimating = true;
+        tick();
+    }
+
+    function showInstant() {
+        if (!resultData) return;
+        isAnimating = false;
+        displayData = new ImageData(new Uint8ClampedArray(resultData.data), outW, outH);
+        currentStep = totalSteps;
+        dstCtx.putImageData(displayData, 0, 0);
+        updateHighlight();
+        updateStats();
+    }
+
+    document.getElementById('actionToggle').addEventListener('click', e => {
+        const btn = e.target.closest('button[data-action]');
+        if (!btn) return;
+        if (btn.dataset.action === 'animate') showAnimate();
+        else showInstant();
+    });
+
+    // --- Default test image on startup ---
+    function createDefaultImage() {
+        const c = document.createElement('canvas');
+        c.width = 320; c.height = 220;
+        const ctx = c.getContext('2d');
+        const g = ctx.createLinearGradient(0, 0, 320, 220);
+        g.addColorStop(0, '#1e3a5f');
+        g.addColorStop(1, '#3d5a7c');
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, 320, 220);
+
+        ctx.fillStyle = '#e63946';
+        ctx.fillRect(40, 40, 80, 80);
+
+        ctx.fillStyle = '#2a9d8f';
+        ctx.beginPath();
+        ctx.arc(220, 110, 55, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#f4a261';
+        ctx.beginPath();
+        ctx.moveTo(160, 150);
+        ctx.lineTo(260, 200);
+        ctx.lineTo(100, 200);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(20, 20, 280, 180);
+
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 16px sans-serif';
+        ctx.fillText('test image', 120, 35);
+
+        const img = new Image();
+        img.onload = () => loadImage(img);
+        img.src = c.toDataURL();
+    }
+
+    // --- Init ---
+    renderKernelInputs();
+    renderPresets();
+    createDefaultImage();
+
+    // Re-adjust highlight on window resize (canvases scale via CSS)
+    window.addEventListener('resize', updateHighlight);
+</script>
+</body>
+</html>
