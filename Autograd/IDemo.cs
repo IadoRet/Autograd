@@ -1,4 +1,4 @@
-namespace Autograd.Demos;
+namespace Autograd;
 
 public interface IDemo
 {

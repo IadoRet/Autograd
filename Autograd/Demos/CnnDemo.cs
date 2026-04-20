@@ -66,11 +66,11 @@ public class CnnDemo : IDemo
 
         int outSize = ImageSize - 6;
 
-        float[][] input2D = DumpHelper.ReshapeTo2D(showcaseImage, ImageSize, ImageSize);
-        float[][] pred2D = DumpHelper.ReshapeTo2D(pred.GetData(), outSize, outSize);
-        float[][] gt2D = DumpHelper.ReshapeTo2D(gtShowcase, outSize, outSize);
+        float[][] input2D = DemoHelper.ReshapeTo2D(showcaseImage, ImageSize, ImageSize);
+        float[][] pred2D = DemoHelper.ReshapeTo2D(pred.GetData(), outSize, outSize);
+        float[][] gt2D = DemoHelper.ReshapeTo2D(gtShowcase, outSize, outSize);
 
-        DumpHelper.DumpCnnData("cnn_data.json", input2D, pred2D, gt2D, lossHistory);
+        DemoHelper.DumpCnnData("cnn_data.json", input2D, pred2D, gt2D, lossHistory);
     }
 
     /// <summary>

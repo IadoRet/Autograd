@@ -1,3 +1,4 @@
+using Autograd;
 using Autograd.Demos;
 
 IDemo[] demos = [

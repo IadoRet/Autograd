@@ -52,8 +52,8 @@ public class MlpDemo : IDemo
         Console.WriteLine($"EXAMPLE. INPUTS: {string.Join(',', example.input.GetData())}, PREDICTED: {exampleOutput.GetData().Single()}, GROUND TRUTH: {example.gt.GetData().Single()}");
         Console.ResetColor();
 
-        DumpHelper.Dump("ground_truth.json", Grid, Range, Fn);
-        DumpHelper.Dump("pred.json", Grid, Range, (a, b) =>
+        DemoHelper.Dump("ground_truth.json", Grid, Range, Fn);
+        DemoHelper.Dump("pred.json", Grid, Range, (a, b) =>
         {
             Tensor input = new Tensor([a, b], [1, 2]);
             return mlp.Forward(input).GetData().Single();

@@ -1,9 +1,9 @@
 using System.Globalization;
 using System.Text;
 
-namespace Autograd.Demos;
+namespace Autograd;
 
-public static class DumpHelper
+public static class DemoHelper
 {
     public static void Dump(string path, int grid, float range, Func<float, float, float> eval)
     {
