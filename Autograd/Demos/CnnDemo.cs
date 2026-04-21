@@ -8,19 +8,27 @@ public class CnnDemo : IDemo
     private const int Epochs = 500;
     private const int SamplesPerEpoch = 32;
     private const int ImageSize = 32;
-    private const float LearningRate = 0.001f;
+
+    // Sobel uses a 3x3 kernel, so it reduces each spatial dim by 2.
+    private const int SobelMargin = 2;
+
+    private const float InitialLearningRate = 0.001f;
+    private const float MinLearningRate = 1e-5f;
     private const int DecayHalfLifeEpochs = 200;
 
     public string Name => "Convolutional Neural Network";
 
     public void Run()
     {
-        // Three 3x3 conv layers with channel hierarchy: 1 -> 8 -> 16 -> 1
-        // Spatial: 32 -> 30 -> 28 -> 26
+        // Channel hierarchy: 1 -> 8 -> 16 -> 1 with 3x3 kernels.
         CNN.CNN cnn = CNN.CNN.Create(inChannels: 1)
                              .WithLayer(outChannels: 8, kernelSize: 3, ActivationType.ReLU)
                              .WithLayer(outChannels: 16, kernelSize: 3, ActivationType.ReLU)
                              .WithOutput(outChannels: 1, kernelSize: 3);
+
+        int cnnMargin = cnn.SpatialReduction;
+        int outSize = ImageSize - cnnMargin;
+        int sobelSize = ImageSize - SobelMargin;
 
         Random random = new(42);
         float[] lossHistory = new float[Epochs];
@@ -28,16 +36,16 @@ public class CnnDemo : IDemo
         for (int epoch = 0; epoch < Epochs; epoch++)
         {
             float epochLoss = 0;
-            float lr = LearningRate; // todo: decay ?
+            float lr = GetLearningRate(epoch);
 
             for (int s = 0; s < SamplesPerEpoch; s++)
             {
                 float[] image = GenerateImage(random);
                 float[] sobel = ComputeSobel(image, ImageSize, ImageSize);
-                float[] gt = CropCenter(sobel, ImageSize - 2, ImageSize - 6);
+                float[] gt = CropCenter(sobel, sobelSize, outSize);
 
                 Tensor input = new(image, [1, 1, ImageSize, ImageSize]);
-                Tensor groundTruth = new(gt, [1, 1, ImageSize - 6, ImageSize - 6]);
+                Tensor groundTruth = new(gt, [1, 1, outSize, outSize]);
 
                 Tensor output = cnn.Forward(input);
                 Tensor mse = Tensor.MSE(output, groundTruth);
@@ -62,15 +70,22 @@ public class CnnDemo : IDemo
         Tensor pred = cnn.Forward(showcaseInput);
 
         float[] sobelShowcase = ComputeSobel(showcaseImage, ImageSize, ImageSize);
-        float[] gtShowcase = CropCenter(sobelShowcase, ImageSize - 2, ImageSize - 6);
-
-        int outSize = ImageSize - 6;
+        float[] gtShowcase = CropCenter(sobelShowcase, sobelSize, outSize);
 
         float[][] input2D = DemoHelper.ReshapeTo2D(showcaseImage, ImageSize, ImageSize);
         float[][] pred2D = DemoHelper.ReshapeTo2D(pred.GetData(), outSize, outSize);
         float[][] gt2D = DemoHelper.ReshapeTo2D(gtShowcase, outSize, outSize);
 
         DemoHelper.DumpCnnData("cnn_data.json", input2D, pred2D, gt2D, lossHistory);
+    }
+
+    /// <summary>
+    /// Exponential LR decay with configurable half-life, floored at <see cref="MinLearningRate"/>.
+    /// </summary>
+    private static float GetLearningRate(int epoch)
+    {
+        float decayed = InitialLearningRate * MathF.Pow(0.5f, (float)epoch / DecayHalfLifeEpochs);
+        return MathF.Max(MinLearningRate, decayed);
     }
 
     /// <summary>

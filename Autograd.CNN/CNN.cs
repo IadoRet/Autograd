@@ -13,6 +13,12 @@ public class CNN
     private readonly LinkedList<ConvolutionLayer> _layers;
     private readonly Random _random = new Random();
 
+    /// <summary>
+    /// Total spatial reduction (per side) caused by valid-mode convolutions in all layers.
+    /// Equals sum of (kernelSize - 1) across layers.
+    /// </summary>
+    public int SpatialReduction { get; private set; }
+
     private CNN(int inChannels)
     {
         _prevChannels = inChannels;
@@ -28,6 +34,7 @@ public class CNN
     {
         _layers.AddLast(new ConvolutionLayer(_prevChannels, outChannels, kernelSize, _random, activation));
         _prevChannels = outChannels;
+        SpatialReduction += kernelSize - 1;
 
         return this;
     }
@@ -36,6 +43,7 @@ public class CNN
     {
         _layers.AddLast(new ConvolutionLayer(_prevChannels, outChannels, kernelSize, _random));
         _prevChannels = outChannels;
+        SpatialReduction += kernelSize - 1;
 
         return this;
     }
