@@ -4,6 +4,7 @@
   </Folder>
   <Project Path="Autograd.CNN/Autograd.CNN.csproj" />
   <Project Path="Autograd.Engine/Autograd.Engine.csproj" />
+  <Project Path="Autograd.KAN/Autograd.KAN.csproj" />
   <Project Path="Autograd.MLP/Autograd.MLP.csproj" />
   <Project Path="Autograd/Autograd.csproj" />
 </Solution>
