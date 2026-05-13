@@ -2,8 +2,9 @@ using Autograd;
 using Autograd.Demos;
 
 IDemo[] demos = [
-    //new MlpDemo(), 
-    new CnnDemo()
+    //new MlpDemo(),
+    //new CnnDemo(),
+    new KanDemo()
 ];
 
 foreach (IDemo demo in demos)
