@@ -234,6 +234,83 @@ public class Tensor
     }
 
     /// <summary>
+    /// Polynomial basis expansion.
+    /// Input shape:  [B, Features]
+    /// Output shape: [B, Features * (degree + 1)]
+    /// For each scalar x, emits [1, x, x^2, ..., x^degree].
+    /// </summary>
+    /// <param name="input">input tensor</param>
+    /// <param name="degree">maximum polynomial degree</param>
+    /// <exception cref="ArgumentOutOfRangeException">Degree is negative</exception>
+    /// <exception cref="TensorDimensionException">Input is not a 2D tensor</exception>
+    public static Tensor PolynomialBasis(Tensor input, int degree)
+    {
+        if (degree < 0)
+            throw new ArgumentOutOfRangeException(nameof(degree), "Polynomial degree must be non-negative.");
+
+        if (input._shape.Length != 2)
+            throw new TensorDimensionException("Polynomial basis requires a 2D tensor shaped [batch, features].");
+
+        int batches = input._shape[0];
+        int features = input._shape[1];
+        int basisSize = degree + 1;
+        int outputFeatures = features * basisSize;
+
+        int[] shape = [batches, outputFeatures];
+        float[] result = new float[batches * outputFeatures];
+
+        for (int b = 0; b < batches; b++)
+        {
+            int inputBase = b * features;
+            int outputBase = b * outputFeatures;
+
+            for (int f = 0; f < features; f++)
+            {
+                float x = input._data[inputBase + f];
+                float power = 1f;
+                int basisBase = outputBase + f * basisSize;
+
+                for (int p = 0; p <= degree; p++)
+                {
+                    result[basisBase + p] = power;
+                    power *= x;
+                }
+            }
+        }
+
+        Tensor o = new(result, shape, input);
+
+        o._backward = Backward;
+
+        return o;
+
+        void Backward()
+        {
+            for (int b = 0; b < batches; b++)
+            {
+                int inputBase = b * features;
+                int outputBase = b * outputFeatures;
+
+                for (int f = 0; f < features; f++)
+                {
+                    float x = input._data[inputBase + f];
+                    float derivativePower = 1f;
+                    float gradient = 0;
+                    int basisBase = outputBase + f * basisSize;
+
+                    for (int p = 1; p <= degree; p++)
+                    {
+                        gradient += o._gradients[basisBase + p] * p * derivativePower;
+                        derivativePower *= x;
+                    }
+
+                    input._gradients[inputBase + f] += gradient;
+                }
+            }
+        }
+    }
+
+    /// <summary>
     /// N-dimensional convolution.
     /// Input shape:  [B, InC, spatial_1, ..., spatial_N]
     /// Kernel shape: [OutC, InC, k_1, ..., k_N]
