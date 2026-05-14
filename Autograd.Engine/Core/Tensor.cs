@@ -311,6 +311,108 @@ public class Tensor
     }
 
     /// <summary>
+    /// Chebyshev polynomial basis expansion.
+    /// Input shape:  [B, Features]
+    /// Output shape: [B, Features * (degree + 1)]
+    /// For each scalar x, emits [T0(x), T1(x), T2(x), ..., Tdegree(x)].
+    /// </summary>
+    /// <param name="input">input tensor</param>
+    /// <param name="degree">maximum Chebyshev polynomial degree</param>
+    /// <exception cref="ArgumentOutOfRangeException">Degree is negative</exception>
+    /// <exception cref="TensorDimensionException">Input is not a 2D tensor</exception>
+    public static Tensor ChebyshevBasis(Tensor input, int degree)
+    {
+        if (degree < 0)
+            throw new ArgumentOutOfRangeException(nameof(degree), "Chebyshev polynomial degree must be non-negative.");
+
+        if (input._shape.Length != 2)
+            throw new TensorDimensionException("Chebyshev basis requires a 2D tensor shaped [batch, features].");
+
+        int batches = input._shape[0];
+        int features = input._shape[1];
+        int basisSize = degree + 1;
+        int outputFeatures = features * basisSize;
+
+        int[] shape = [batches, outputFeatures];
+        float[] result = new float[batches * outputFeatures];
+
+        for (int b = 0; b < batches; b++)
+        {
+            int inputBase = b * features;
+            int outputBase = b * outputFeatures;
+
+            for (int f = 0; f < features; f++)
+            {
+                float x = input._data[inputBase + f];
+                int basisBase = outputBase + f * basisSize;
+
+                result[basisBase] = 1f;
+
+                if (degree == 0)
+                    continue;
+
+                result[basisBase + 1] = x;
+
+                float previous = 1f;
+                float current = x;
+
+                for (int p = 2; p <= degree; p++)
+                {
+                    float next = 2f * x * current - previous;
+                    result[basisBase + p] = next;
+                    previous = current;
+                    current = next;
+                }
+            }
+        }
+
+        Tensor o = new(result, shape, input);
+
+        o._backward = Backward;
+
+        return o;
+
+        void Backward()
+        {
+            for (int b = 0; b < batches; b++)
+            {
+                int inputBase = b * features;
+                int outputBase = b * outputFeatures;
+
+                for (int f = 0; f < features; f++)
+                {
+                    float x = input._data[inputBase + f];
+                    float gradient = 0;
+                    int basisBase = outputBase + f * basisSize;
+
+                    if (degree >= 1)
+                        gradient += o._gradients[basisBase + 1];
+
+                    float previous = 1f;
+                    float current = x;
+                    float previousDerivative = 0f;
+                    float currentDerivative = 1f;
+
+                    for (int p = 2; p <= degree; p++)
+                    {
+                        float next = 2f * x * current - previous;
+                        float nextDerivative = 2f * current + 2f * x * currentDerivative - previousDerivative;
+
+                        gradient += o._gradients[basisBase + p] * nextDerivative;
+
+                        previous = current;
+                        current = next;
+                        previousDerivative = currentDerivative;
+                        currentDerivative = nextDerivative;
+                    }
+
+                    input._gradients[inputBase + f] += gradient;
+                }
+            }
+        }
+    }
+
+    /// <summary>
     /// N-dimensional convolution.
     /// Input shape:  [B, InC, spatial_1, ..., spatial_N]
     /// Kernel shape: [OutC, InC, k_1, ..., k_N]
