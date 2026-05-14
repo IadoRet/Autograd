@@ -1,9 +1,10 @@
 using Autograd.Engine.Core;
+using Autograd.Engine.Enums;
 
 namespace Autograd.KAN;
 
 /// <summary>
-/// Kolmogorov-Arnold Network with polynomial edge functions.
+/// Kolmogorov-Arnold Network with configurable basis functions.
 /// </summary>
 // ReSharper disable once InconsistentNaming
 public class KAN
@@ -23,24 +24,24 @@ public class KAN
         return new KAN(inputSize);
     }
 
-    public KAN WithLayer(int outputSize, int degree)
+    public KAN WithLayer(int outputSize, int degree, BasisType basis = BasisType.Polynomial)
     {
-        AddLayer(outputSize, degree);
+        AddLayer(outputSize, degree, basis);
 
         return this;
     }
 
-    public KAN WithOutput(int outputSize, int degree)
+    public KAN WithOutput(int outputSize, int degree, BasisType basis = BasisType.Polynomial)
     {
-        AddLayer(outputSize, degree);
+        AddLayer(outputSize, degree, basis);
 
         return this;
     }
 
-    private void AddLayer(int outputSize, int degree)
+    private void AddLayer(int outputSize, int degree, BasisType basis)
     {
         int previousOutputSize = _layers.Last == null ? _inputSize : _layers.Last.ValueRef.OutputSize;
-        _layers.AddLast(new Layer(previousOutputSize, outputSize, degree, _random));
+        _layers.AddLast(new Layer(previousOutputSize, outputSize, degree, _random, basis));
     }
 
     public Tensor Forward(Tensor input)

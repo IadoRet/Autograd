@@ -1,16 +1,18 @@
 using Autograd.Engine.Core;
+using Autograd.Engine.Enums;
 
 namespace Autograd.KAN;
 
 /// <summary>
-/// Polynomial KAN layer.
+/// KAN layer with configurable basis functions.
 /// </summary>
 public class Layer
 {
     private readonly int _degree;
+    private readonly BasisType _basis;
 
     /// <summary>
-    /// Polynomial coefficients. Shape: [inputSize * (degree + 1), outputSize]
+    /// Basis coefficients. Shape: [inputSize * (degree + 1), outputSize]
     /// </summary>
     private readonly Tensor _c;
 
@@ -24,12 +26,13 @@ public class Layer
     /// </summary>
     public int OutputSize { get; }
 
-    public Layer(int inputSize, int outputSize, int degree, Random random)
+    public Layer(int inputSize, int outputSize, int degree, Random random, BasisType basis)
     {
         if (degree < 0)
-            throw new ArgumentOutOfRangeException(nameof(degree), "Polynomial degree must be non-negative.");
+            throw new ArgumentOutOfRangeException(nameof(degree), "Basis degree must be non-negative.");
 
         _degree = degree;
+        _basis = basis;
         OutputSize = outputSize;
 
         int basisSize = inputSize * (degree + 1);
@@ -50,7 +53,12 @@ public class Layer
     /// </summary>
     public Tensor Forward(Tensor input)
     {
-        Tensor basis = Tensor.PolynomialBasis(input, _degree);
+        Tensor basis = _basis switch
+        {
+            BasisType.Polynomial => Tensor.PolynomialBasis(input, _degree),
+            BasisType.Chebyshev => Tensor.ChebyshevBasis(input, _degree),
+            _ => throw new ArgumentOutOfRangeException(nameof(_basis), _basis, "Unsupported basis type.")
+        };
 
         return basis * _c + _b;
     }
