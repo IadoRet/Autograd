@@ -11,37 +11,43 @@ public class KAN
 {
     private readonly int _inputSize;
     private readonly LinkedList<Layer> _layers;
-    private readonly Random _random = new Random();
+    private readonly Random _random;
 
-    private KAN(int inputSize)
+    private KAN(int inputSize, Random random)
     {
         _inputSize = inputSize;
+        _random = random;
         _layers = [];
     }
 
     public static KAN Create(int inputSize)
     {
-        return new KAN(inputSize);
+        return new KAN(inputSize, new Random());
     }
 
-    public KAN WithLayer(int outputSize, int degree, BasisType basis = BasisType.Polynomial)
+    public static KAN Create(int inputSize, int seed)
     {
-        AddLayer(outputSize, degree, basis);
+        return new KAN(inputSize, new Random(seed));
+    }
+
+    public KAN WithLayer(int outputSize, int[] degrees, BasisType basis = BasisType.Polynomial)
+    {
+        AddLayer(outputSize, degrees, basis);
 
         return this;
     }
 
-    public KAN WithOutput(int outputSize, int degree, BasisType basis = BasisType.Polynomial)
+    public KAN WithOutput(int outputSize, int[] degrees, BasisType basis = BasisType.Polynomial)
     {
-        AddLayer(outputSize, degree, basis);
+        AddLayer(outputSize, degrees, basis);
 
         return this;
     }
 
-    private void AddLayer(int outputSize, int degree, BasisType basis)
+    private void AddLayer(int outputSize, int[] degrees, BasisType basis)
     {
         int previousOutputSize = _layers.Last == null ? _inputSize : _layers.Last.ValueRef.OutputSize;
-        _layers.AddLast(new Layer(previousOutputSize, outputSize, degree, _random, basis));
+        _layers.AddLast(new Layer(previousOutputSize, outputSize, basis, degrees, _random));
     }
 
     public Tensor Forward(Tensor input)

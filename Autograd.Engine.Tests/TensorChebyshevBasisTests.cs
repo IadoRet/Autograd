@@ -12,7 +12,7 @@ public class TensorChebyshevBasisTests
     {
         var input = new Tensor([0.5f, -1f, 0f, 1f], [2, 2]);
 
-        Tensor basis = Tensor.ChebyshevBasis(input, degree: 4);
+        Tensor basis = Tensor.ChebyshevBasis(input, [0, 1, 2, 3, 4]);
 
         float[] result = basis.GetData();
 
@@ -34,7 +34,7 @@ public class TensorChebyshevBasisTests
     {
         var input = new Tensor(new float[6], [2, 3]);
 
-        Tensor basis = Tensor.ChebyshevBasis(input, degree: 4);
+        Tensor basis = Tensor.ChebyshevBasis(input, [0, 1, 2, 3, 4]);
 
         Assert.Equal([2, 15], basis.GetShape());
     }
@@ -44,7 +44,7 @@ public class TensorChebyshevBasisTests
     {
         var input = new Tensor([0.5f, -0.25f], [1, 2]);
 
-        Tensor basis = Tensor.ChebyshevBasis(input, degree: 4);
+        Tensor basis = Tensor.ChebyshevBasis(input, [0, 1, 2, 3, 4]);
         basis.Backward();
 
         float[] gradients = input.GetGradients();
@@ -58,7 +58,7 @@ public class TensorChebyshevBasisTests
     {
         var input = new Tensor([0.5f, -0.25f], [1, 2]);
 
-        Tensor basis = Tensor.ChebyshevBasis(input, degree: 0);
+        Tensor basis = Tensor.ChebyshevBasis(input, [0]);
         basis.Backward();
 
         Assert.All(input.GetGradients(), g => Assert.Equal(0f, g, Delta));
@@ -69,7 +69,7 @@ public class TensorChebyshevBasisTests
     {
         var input = new Tensor([0.5f, -0.25f, 1f], [1, 3]);
 
-        Tensor basis = Tensor.ChebyshevBasis(input, degree: 0);
+        Tensor basis = Tensor.ChebyshevBasis(input, [0]);
 
         Assert.Equal([1, 3], basis.GetShape());
         Assert.Equal([1f, 1f, 1f], basis.GetData());
@@ -80,7 +80,7 @@ public class TensorChebyshevBasisTests
     {
         var input = new Tensor([1f], [1, 1]);
 
-        Assert.Throws<ArgumentOutOfRangeException>(() => Tensor.ChebyshevBasis(input, degree: -1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => Tensor.ChebyshevBasis(input, [-1]));
     }
 
     [Fact]
@@ -88,6 +88,6 @@ public class TensorChebyshevBasisTests
     {
         var input = new Tensor([1f, 2f, 3f], [3]);
 
-        Assert.Throws<TensorDimensionException>(() => Tensor.ChebyshevBasis(input, degree: 2));
+        Assert.Throws<TensorDimensionException>(() => Tensor.ChebyshevBasis(input, [0, 1, 2]));
     }
 }

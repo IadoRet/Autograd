@@ -12,7 +12,7 @@ public class TensorPolynomialBasisTests
     {
         var input = new Tensor([2f, -3f, 0.5f, 4f], [2, 2]);
 
-        Tensor basis = Tensor.PolynomialBasis(input, degree: 3);
+        Tensor basis = Tensor.PolynomialBasis(input, [0, 1, 2, 3]);
 
         float[] result = basis.GetData();
 
@@ -34,7 +34,7 @@ public class TensorPolynomialBasisTests
     {
         var input = new Tensor(new float[6], [2, 3]);
 
-        Tensor basis = Tensor.PolynomialBasis(input, degree: 3);
+        Tensor basis = Tensor.PolynomialBasis(input, [0, 1, 2, 3]);
 
         Assert.Equal([2, 12], basis.GetShape());
     }
@@ -44,7 +44,7 @@ public class TensorPolynomialBasisTests
     {
         var input = new Tensor([2f, -3f, 0.5f, 4f], [2, 2]);
 
-        Tensor basis = Tensor.PolynomialBasis(input, 0, 2, 4);
+        Tensor basis = Tensor.PolynomialBasis(input, [0, 2, 4]);
 
         float[] result = basis.GetData();
 
@@ -66,7 +66,7 @@ public class TensorPolynomialBasisTests
     {
         var input = new Tensor(new float[6], [2, 3]);
 
-        Tensor basis = Tensor.PolynomialBasis(input, 1, 3);
+        Tensor basis = Tensor.PolynomialBasis(input, [1, 3]);
 
         Assert.Equal([2, 6], basis.GetShape());
     }
@@ -76,7 +76,7 @@ public class TensorPolynomialBasisTests
     {
         var input = new Tensor([2f], [1, 1]);
 
-        Tensor basis = Tensor.PolynomialBasis(input, 4, 0, 2);
+        Tensor basis = Tensor.PolynomialBasis(input, [4, 0, 2]);
 
         Assert.Equal([16f, 1f, 4f], basis.GetData());
     }
@@ -86,7 +86,7 @@ public class TensorPolynomialBasisTests
     {
         var input = new Tensor([2f, -3f], [1, 2]);
 
-        Tensor basis = Tensor.PolynomialBasis(input, degree: 3);
+        Tensor basis = Tensor.PolynomialBasis(input, [0, 1, 2, 3]);
         basis.Backward();
 
         float[] gradients = input.GetGradients();
@@ -100,7 +100,7 @@ public class TensorPolynomialBasisTests
     {
         var input = new Tensor([2f, -3f], [1, 2]);
 
-        Tensor basis = Tensor.PolynomialBasis(input, degree: 0);
+        Tensor basis = Tensor.PolynomialBasis(input, [0]);
         basis.Backward();
 
         Assert.All(input.GetGradients(), g => Assert.Equal(0f, g, Delta));
@@ -111,7 +111,7 @@ public class TensorPolynomialBasisTests
     {
         var input = new Tensor([2f, -3f], [1, 2]);
 
-        Tensor basis = Tensor.PolynomialBasis(input, 0, 2, 4);
+        Tensor basis = Tensor.PolynomialBasis(input, [0, 2, 4]);
         basis.Backward();
 
         float[] gradients = input.GetGradients();
@@ -125,7 +125,7 @@ public class TensorPolynomialBasisTests
     {
         var input = new Tensor([2f, -3f, 4f], [1, 3]);
 
-        Tensor basis = Tensor.PolynomialBasis(input, degree: 0);
+        Tensor basis = Tensor.PolynomialBasis(input, [0]);
 
         Assert.Equal([1, 3], basis.GetShape());
         Assert.Equal([1f, 1f, 1f], basis.GetData());
@@ -136,7 +136,7 @@ public class TensorPolynomialBasisTests
     {
         var input = new Tensor([1f], [1, 1]);
 
-        Assert.Throws<ArgumentOutOfRangeException>(() => Tensor.PolynomialBasis(input, degree: -1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => Tensor.PolynomialBasis(input, [-1]));
     }
 
     [Fact]
@@ -144,7 +144,7 @@ public class TensorPolynomialBasisTests
     {
         var input = new Tensor([1f], [1, 1]);
 
-        Assert.Throws<ArgumentOutOfRangeException>(() => Tensor.PolynomialBasis(input, 0, -1, 2));
+        Assert.Throws<ArgumentOutOfRangeException>(() => Tensor.PolynomialBasis(input, [0, -1, 2]));
     }
 
     [Fact]
@@ -160,6 +160,6 @@ public class TensorPolynomialBasisTests
     {
         var input = new Tensor([1f, 2f, 3f], [3]);
 
-        Assert.Throws<TensorDimensionException>(() => Tensor.PolynomialBasis(input, degree: 2));
+        Assert.Throws<TensorDimensionException>(() => Tensor.PolynomialBasis(input, [0, 1, 2]));
     }
 }

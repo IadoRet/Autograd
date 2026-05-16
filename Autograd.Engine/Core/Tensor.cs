@@ -234,28 +234,6 @@ public class Tensor
     }
 
     /// <summary>
-    /// Polynomial basis expansion.
-    /// Input shape:  [B, Features]
-    /// Output shape: [B, Features * (degree + 1)]
-    /// For each scalar x, emits [1, x, x^2, ..., x^degree].
-    /// </summary>
-    /// <param name="input">input tensor</param>
-    /// <param name="degree">maximum polynomial degree</param>
-    /// <exception cref="ArgumentOutOfRangeException">Degree is negative</exception>
-    /// <exception cref="TensorDimensionException">Input is not a 2D tensor</exception>
-    public static Tensor PolynomialBasis(Tensor input, int degree)
-    {
-        if (degree < 0)
-            throw new ArgumentOutOfRangeException(nameof(degree), "Polynomial degree must be non-negative.");
-
-        int[] degrees = new int[degree + 1];
-        for (int i = 0; i <= degree; i++)
-            degrees[i] = i;
-
-        return PolynomialBasis(input, degrees);
-    }
-
-    /// <summary>
     /// Polynomial basis expansion for selected degrees.
     /// Input shape:  [B, Features]
     /// Output shape: [B, Features * degrees.Length]
@@ -266,7 +244,7 @@ public class Tensor
     /// <exception cref="ArgumentException">Degrees are empty</exception>
     /// <exception cref="ArgumentOutOfRangeException">Any selected degree is negative</exception>
     /// <exception cref="TensorDimensionException">Input is not a 2D tensor</exception>
-    public static Tensor PolynomialBasis(Tensor input, params int[] degrees)
+    public static Tensor PolynomialBasis(Tensor input, int[] degrees)
     {
         ArgumentNullException.ThrowIfNull(degrees);
 
@@ -345,21 +323,32 @@ public class Tensor
     /// <summary>
     /// Chebyshev polynomial basis expansion.
     /// Input shape:  [B, Features]
-    /// Output shape: [B, Features * (degree + 1)]
-    /// For each scalar x, emits [T0(x), T1(x), T2(x), ..., Tdegree(x)].
+    /// Output shape: [B, Features * (degrees.Max() + 1)]
+    /// For each scalar x, emits [T0(x), T1(x), T2(x), ..., Tdegrees.Max()(x)].
     /// </summary>
     /// <param name="input">input tensor</param>
-    /// <param name="degree">maximum Chebyshev polynomial degree</param>
-    /// <exception cref="ArgumentOutOfRangeException">Degree is negative</exception>
+    /// <param name="degrees">selected Chebyshev polynomial degrees</param>
+    /// <exception cref="ArgumentException">Degrees are empty</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Any selected degree is negative</exception>
     /// <exception cref="TensorDimensionException">Input is not a 2D tensor</exception>
-    public static Tensor ChebyshevBasis(Tensor input, int degree)
+    public static Tensor ChebyshevBasis(Tensor input, int[] degrees)
     {
-        if (degree < 0)
-            throw new ArgumentOutOfRangeException(nameof(degree), "Chebyshev polynomial degree must be non-negative.");
+        ArgumentNullException.ThrowIfNull(degrees);
+
+        if (degrees.Length == 0)
+            throw new ArgumentException("At least one Chebyshev polynomial degree must be provided.", nameof(degrees));
+
+        for (int i = 0; i < degrees.Length; i++)
+        {
+            if (degrees[i] < 0)
+                throw new ArgumentOutOfRangeException(nameof(degrees), "Chebyshev polynomial degrees must be non-negative.");
+        }
 
         if (input._shape.Length != 2)
             throw new TensorDimensionException("Chebyshev basis requires a 2D tensor shaped [batch, features].");
 
+        // TODO: emit only selected Chebyshev degrees instead of expanding to all degrees up to Max().
+        int degree = degrees.Max();
         int batches = input._shape[0];
         int features = input._shape[1];
         int basisSize = degree + 1;
