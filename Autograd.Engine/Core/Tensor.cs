@@ -248,12 +248,43 @@ public class Tensor
         if (degree < 0)
             throw new ArgumentOutOfRangeException(nameof(degree), "Polynomial degree must be non-negative.");
 
+        int[] degrees = new int[degree + 1];
+        for (int i = 0; i <= degree; i++)
+            degrees[i] = i;
+
+        return PolynomialBasis(input, degrees);
+    }
+
+    /// <summary>
+    /// Polynomial basis expansion for selected degrees.
+    /// Input shape:  [B, Features]
+    /// Output shape: [B, Features * degrees.Length]
+    /// For each scalar x and each selected degree p, emits x^p in the provided degree order.
+    /// </summary>
+    /// <param name="input">input tensor</param>
+    /// <param name="degrees">selected polynomial degrees</param>
+    /// <exception cref="ArgumentException">Degrees are empty</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Any selected degree is negative</exception>
+    /// <exception cref="TensorDimensionException">Input is not a 2D tensor</exception>
+    public static Tensor PolynomialBasis(Tensor input, params int[] degrees)
+    {
+        ArgumentNullException.ThrowIfNull(degrees);
+
+        if (degrees.Length == 0)
+            throw new ArgumentException("At least one polynomial degree must be provided.", nameof(degrees));
+
+        for (int i = 0; i < degrees.Length; i++)
+        {
+            if (degrees[i] < 0)
+                throw new ArgumentOutOfRangeException(nameof(degrees), "Polynomial degrees must be non-negative.");
+        }
+
         if (input._shape.Length != 2)
             throw new TensorDimensionException("Polynomial basis requires a 2D tensor shaped [batch, features].");
 
         int batches = input._shape[0];
         int features = input._shape[1];
-        int basisSize = degree + 1;
+        int basisSize = degrees.Length;
         int outputFeatures = features * basisSize;
 
         int[] shape = [batches, outputFeatures];
@@ -267,13 +298,12 @@ public class Tensor
             for (int f = 0; f < features; f++)
             {
                 float x = input._data[inputBase + f];
-                float power = 1f;
                 int basisBase = outputBase + f * basisSize;
 
-                for (int p = 0; p <= degree; p++)
+                for (int i = 0; i < basisSize; i++)
                 {
-                    result[basisBase + p] = power;
-                    power *= x;
+                    int degree = degrees[i];
+                    result[basisBase + i] = MathF.Pow(x, degree);
                 }
             }
         }
@@ -294,14 +324,16 @@ public class Tensor
                 for (int f = 0; f < features; f++)
                 {
                     float x = input._data[inputBase + f];
-                    float derivativePower = 1f;
                     float gradient = 0;
                     int basisBase = outputBase + f * basisSize;
 
-                    for (int p = 1; p <= degree; p++)
+                    for (int i = 0; i < basisSize; i++)
                     {
-                        gradient += o._gradients[basisBase + p] * p * derivativePower;
-                        derivativePower *= x;
+                        int degree = degrees[i];
+                        if (degree == 0)
+                            continue;
+
+                        gradient += o._gradients[basisBase + i] * degree * MathF.Pow(x, degree - 1);
                     }
 
                     input._gradients[inputBase + f] += gradient;
