@@ -466,6 +466,154 @@ public class Tensor
     }
 
     /// <summary>
+    /// B-spline basis expansion on a uniform extended knot grid.
+    /// Input shape:  [B, Features]
+    /// Output shape: [B, Features * (gridSize + splineOrder)]
+    /// </summary>
+    /// <param name="input">input tensor</param>
+    /// <param name="gridSize">number of intervals in the core grid</param>
+    /// <param name="splineOrder">spline polynomial degree</param>
+    /// <param name="gridMin">left boundary of the core grid</param>
+    /// <param name="gridMax">right boundary of the core grid</param>
+    /// <exception cref="ArgumentOutOfRangeException">Grid size, spline order, or grid range is invalid</exception>
+    /// <exception cref="TensorDimensionException">Input is not a 2D tensor</exception>
+    public static Tensor BSplineBasis(Tensor input, int gridSize, int splineOrder, float gridMin, float gridMax)
+    {
+        if (gridSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(gridSize), "B-spline grid size must be positive.");
+
+        if (splineOrder < 0)
+            throw new ArgumentOutOfRangeException(nameof(splineOrder), "B-spline order must be non-negative.");
+
+        if (gridMax <= gridMin)
+            throw new ArgumentOutOfRangeException(nameof(gridMax), "B-spline grid max must be greater than grid min.");
+
+        if (input._shape.Length != 2)
+            throw new TensorDimensionException("B-spline basis requires a 2D tensor shaped [batch, features].");
+
+        int batches = input._shape[0];
+        int features = input._shape[1];
+        int basisSize = gridSize + splineOrder;
+        int outputFeatures = features * basisSize;
+
+        int[] shape = [batches, outputFeatures];
+        float[] result = new float[batches * outputFeatures];
+        float[] knots = CreateUniformBSplineKnots(gridSize, splineOrder, gridMin, gridMax);
+        float[] basis = new float[knots.Length - 1];
+
+        for (int b = 0; b < batches; b++)
+        {
+            int inputBase = b * features;
+            int outputBase = b * outputFeatures;
+
+            for (int f = 0; f < features; f++)
+            {
+                float x = input._data[inputBase + f];
+                int basisBase = outputBase + f * basisSize;
+
+                FillBSplineBasis(x, knots, splineOrder, basis);
+
+                for (int i = 0; i < basisSize; i++)
+                    result[basisBase + i] = basis[i];
+            }
+        }
+
+        Tensor o = new(result, shape, input);
+
+        o._backward = Backward;
+
+        return o;
+
+        void Backward()
+        {
+            if (splineOrder == 0)
+                return;
+
+            float[] lowerBasis = new float[knots.Length - 1];
+
+            for (int b = 0; b < batches; b++)
+            {
+                int inputBase = b * features;
+                int outputBase = b * outputFeatures;
+
+                for (int f = 0; f < features; f++)
+                {
+                    float x = input._data[inputBase + f];
+                    float gradient = 0;
+                    int basisBase = outputBase + f * basisSize;
+
+                    FillBSplineBasis(x, knots, splineOrder - 1, lowerBasis);
+
+                    for (int i = 0; i < basisSize; i++)
+                    {
+                        float derivative = BSplineDerivative(knots, lowerBasis, splineOrder, i);
+                        gradient += o._gradients[basisBase + i] * derivative;
+                    }
+
+                    input._gradients[inputBase + f] += gradient;
+                }
+            }
+        }
+    }
+
+    private static float[] CreateUniformBSplineKnots(int gridSize, int splineOrder, float gridMin, float gridMax)
+    {
+        int knotCount = gridSize + 2 * splineOrder + 1;
+        float step = (gridMax - gridMin) / gridSize;
+        float[] knots = new float[knotCount];
+
+        for (int i = 0; i < knotCount; i++)
+            knots[i] = gridMin + (i - splineOrder) * step;
+
+        return knots;
+    }
+
+    private static void FillBSplineBasis(float x, float[] knots, int splineDegree, float[] basis)
+    {
+        int intervalCount = knots.Length - 1;
+        Array.Clear(basis, 0, intervalCount);
+
+        for (int i = 0; i < intervalCount; i++)
+        {
+            if (IsInsideKnotInterval(x, knots[i], knots[i + 1], i, intervalCount))
+                basis[i] = 1f;
+        }
+
+        for (int degree = 1; degree <= splineDegree; degree++)
+        {
+            int basisCount = intervalCount - degree;
+
+            for (int i = 0; i < basisCount; i++)
+            {
+                float leftDenominator = knots[i + degree] - knots[i];
+                float rightDenominator = knots[i + degree + 1] - knots[i + 1];
+
+                float left = leftDenominator == 0f ? 0f : (x - knots[i]) / leftDenominator * basis[i];
+                float right = rightDenominator == 0f ? 0f : (knots[i + degree + 1] - x) / rightDenominator * basis[i + 1];
+
+                basis[i] = left + right;
+            }
+        }
+
+    }
+
+    private static bool IsInsideKnotInterval(float x, float left, float right, int intervalIndex, int intervalCount)
+    {
+        return x >= left && x < right || (intervalIndex == intervalCount - 1 && x == right);
+    }
+
+    private static float BSplineDerivative(float[] knots, float[] lowerBasis, int splineOrder, int basisIndex)
+    {
+        float leftDenominator = knots[basisIndex + splineOrder] - knots[basisIndex];
+        float rightDenominator = knots[basisIndex + splineOrder + 1] - knots[basisIndex + 1];
+
+        float left = leftDenominator == 0f ? 0f : splineOrder / leftDenominator * lowerBasis[basisIndex];
+        float right = rightDenominator == 0f ? 0f : splineOrder / rightDenominator * lowerBasis[basisIndex + 1];
+
+        return left - right;
+    }
+
+    /// <summary>
     /// N-dimensional convolution.
     /// Input shape:  [B, InC, spatial_1, ..., spatial_N]
     /// Kernel shape: [OutC, InC, k_1, ..., k_N]
