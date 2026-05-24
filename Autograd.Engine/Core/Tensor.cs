@@ -372,19 +372,19 @@ public class Tensor
                 {
                     float value;
 
-                    if (degree == 0)
+                    switch (degree)
                     {
-                        value = 1f;
-                    }
-                    else if (degree == 1)
-                    {
-                        value = current;
-                    }
-                    else
-                    {
-                        value = 2f * x * current - previous;
-                        previous = current;
-                        current = value;
+                        case 0:
+                            value = 1f;
+                            break;
+                        case 1:
+                            value = current;
+                            break;
+                        default:
+                            value = 2f * x * current - previous;
+                            previous = current;
+                            current = value;
+                            break;
                     }
 
                     while (nextDegreeIndex < basisSize && degrees[degreeOrder[nextDegreeIndex]] == degree)
@@ -431,23 +431,25 @@ public class Tensor
                     {
                         float derivative;
 
-                        if (degree == 0)
+                        switch (degree)
                         {
-                            derivative = 0f;
-                        }
-                        else if (degree == 1)
-                        {
-                            derivative = currentDerivative;
-                        }
-                        else
-                        {
-                            float next = 2f * x * current - previous;
-                            derivative = 2f * current + 2f * x * currentDerivative - previousDerivative;
+                            case 0:
+                                derivative = 0f;
+                                break;
+                            case 1:
+                                derivative = currentDerivative;
+                                break;
+                            default:
+                            {
+                                float next = 2f * x * current - previous;
+                                derivative = 2f * current + 2f * x * currentDerivative - previousDerivative;
 
-                            previous = current;
-                            current = next;
-                            previousDerivative = currentDerivative;
-                            currentDerivative = derivative;
+                                previous = current;
+                                current = next;
+                                previousDerivative = currentDerivative;
+                                currentDerivative = derivative;
+                                break;
+                            }
                         }
 
                         while (nextDegreeIndex < basisSize && degrees[degreeOrder[nextDegreeIndex]] == degree)
