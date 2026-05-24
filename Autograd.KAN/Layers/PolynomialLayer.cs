@@ -1,12 +1,13 @@
 using Autograd.Engine.Core;
 using Autograd.Engine.Enums;
+using Autograd.KAN.Abstractions;
 
-namespace Autograd.KAN;
+namespace Autograd.KAN.Layers;
 
 /// <summary>
 /// KAN layer with configurable basis functions.
 /// </summary>
-public class Layer
+public class PolynomialLayer : IKANLayer
 {
     private readonly int[] _degrees;
     private readonly BasisType _basis;
@@ -24,9 +25,9 @@ public class Layer
     /// <summary>
     /// Output size.
     /// </summary>
-    public int OutputSize { get; }
+    private readonly int _outputSize;
 
-    public Layer(int inputSize, int outputSize, BasisType basis, int[] degrees, Random random)
+    public PolynomialLayer(int inputSize, int outputSize, BasisType basis, int[] degrees, Random random)
     {
         ArgumentNullException.ThrowIfNull(degrees);
 
@@ -41,7 +42,7 @@ public class Layer
 
         _degrees = degrees.ToArray();
         _basis = basis;
-        OutputSize = outputSize;
+        _outputSize = outputSize;
 
         int basisSize = inputSize * GetBasisSize(basis, _degrees);
         (_c, _b) = CreateParameters(outputSize, random, basisSize);
@@ -71,6 +72,8 @@ public class Layer
 
         return (new Tensor(cData, [basisSize, outputSize]), new Tensor(bData, [1, outputSize]));
     }
+
+    public int GetOutputSize() => _outputSize;
 
     /// <summary>
     /// Forward pass.

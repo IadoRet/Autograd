@@ -1,5 +1,7 @@
 using Autograd.Engine.Core;
 using Autograd.Engine.Enums;
+using Autograd.KAN.Abstractions;
+using Autograd.KAN.Layers;
 
 namespace Autograd.KAN;
 
@@ -10,7 +12,7 @@ namespace Autograd.KAN;
 public class KAN
 {
     private readonly int _inputSize;
-    private readonly LinkedList<Layer> _layers;
+    private readonly List<IKANLayer> _layers;
     private readonly Random _random;
 
     private KAN(int inputSize, Random random)
@@ -30,29 +32,29 @@ public class KAN
         return new KAN(inputSize, new Random(seed));
     }
 
-    public KAN WithLayer(int outputSize, int[] degrees, BasisType basis = BasisType.Polynomial)
+    public KAN WithPolynomialLayer(int outputSize, int[] degrees, BasisType basis = BasisType.Polynomial)
     {
-        AddLayer(outputSize, degrees, basis);
+        AddPolynomialLayer(outputSize, degrees, basis);
 
         return this;
     }
 
-    public KAN WithOutput(int outputSize, int[] degrees, BasisType basis = BasisType.Polynomial)
+    public KAN WithPolynomialOutput(int outputSize, int[] degrees, BasisType basis = BasisType.Polynomial)
     {
-        AddLayer(outputSize, degrees, basis);
+        AddPolynomialLayer(outputSize, degrees, basis);
 
         return this;
     }
 
-    private void AddLayer(int outputSize, int[] degrees, BasisType basis)
+    private void AddPolynomialLayer(int outputSize, int[] degrees, BasisType basis)
     {
-        int previousOutputSize = _layers.Last == null ? _inputSize : _layers.Last.ValueRef.OutputSize;
-        _layers.AddLast(new Layer(previousOutputSize, outputSize, basis, degrees, _random));
+        int previousOutputSize = _layers.Any() ? _layers.Last().GetOutputSize() : _inputSize;
+        _layers.Add(new PolynomialLayer(previousOutputSize, outputSize, basis, degrees, _random));
     }
 
     public Tensor Forward(Tensor input)
     {
-        foreach (Layer layer in _layers)
+        foreach (IKANLayer layer in _layers)
             input = layer.Forward(input);
 
         return input;
@@ -60,13 +62,13 @@ public class KAN
 
     public void Zero()
     {
-        foreach (Layer layer in _layers)
+        foreach (IKANLayer layer in _layers)
             layer.Zero();
     }
 
     public void Adjust(float learningRate)
     {
-        foreach (Layer layer in _layers)
+        foreach (IKANLayer layer in _layers)
             layer.Adjust(learningRate);
     }
 }

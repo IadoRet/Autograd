@@ -24,15 +24,15 @@ public class KanDemo : IDemo
         Experiment[] experiments =
         [
             new("Polynomial 0..2", "poly_full_2", () => KAN.KAN.Create(2, ModelSeed)
-                                                               .WithOutput(1, [0, 1, 2])),
+                                                               .WithPolynomialOutput(1, [0, 1, 2])),
             new("Polynomial [2]", "poly_2", () => KAN.KAN.Create(2, ModelSeed)
-                                                            .WithOutput(1, [2])),
+                                                            .WithPolynomialOutput(1, [2])),
             new("Polynomial [0,2]", "poly_0_2", () => KAN.KAN.Create(2, ModelSeed)
-                                                                .WithOutput(1, [0, 2])),
+                                                                .WithPolynomialOutput(1, [0, 2])),
             new("Polynomial [0,1]", "poly_0_1", () => KAN.KAN.Create(2, ModelSeed)
-                                                                .WithOutput(1, [0, 1])),
+                                                                .WithPolynomialOutput(1, [0, 1])),
             new("Chebyshev 0..2", "cheb_full_2", () => KAN.KAN.Create(2, ModelSeed)
-                                                               .WithOutput(1, [0, 1, 2], BasisType.Chebyshev))
+                                                               .WithPolynomialOutput(1, [0, 1, 2], BasisType.Chebyshev))
         ];
 
         List<ExperimentResult> results = [];
