@@ -34,30 +34,15 @@ public class PolynomialLayer : IKANLayer
         if (degrees.Length == 0)
             throw new ArgumentException("At least one basis degree must be provided.", nameof(degrees));
 
-        for (int i = 0; i < degrees.Length; i++)
-        {
-            if (degrees[i] < 0)
-                throw new ArgumentOutOfRangeException(nameof(degrees), "Basis degrees must be non-negative.");
-        }
+        if (degrees.Any(t => t < 0))
+            throw new ArgumentOutOfRangeException(nameof(degrees), "Basis degrees must be non-negative.");
 
         _degrees = degrees.ToArray();
         _basis = basis;
         _outputSize = outputSize;
 
-        int basisSize = inputSize * GetBasisSize(basis, _degrees);
+        int basisSize = inputSize * degrees.Length;
         (_c, _b) = CreateParameters(outputSize, random, basisSize);
-    }
-
-    // TODO: remove function after supporting degrees array
-    private static int GetBasisSize(BasisType basis, int[] degrees)
-    {
-        return basis switch
-        {
-            BasisType.Polynomial => degrees.Length,
-            // TODO: support selected Chebyshev degrees instead of expanding to all degrees up to Max().
-            BasisType.Chebyshev => degrees.Max() + 1,
-            _ => throw new ArgumentOutOfRangeException(nameof(basis), basis, "Unsupported basis type.")
-        };
     }
 
     private static (Tensor c, Tensor b) CreateParameters(int outputSize, Random random, int basisSize)

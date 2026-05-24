@@ -321,10 +321,10 @@ public class Tensor
     }
 
     /// <summary>
-    /// Chebyshev polynomial basis expansion.
+    /// Chebyshev polynomial basis expansion for selected degrees.
     /// Input shape:  [B, Features]
-    /// Output shape: [B, Features * (degrees.Max() + 1)]
-    /// For each scalar x, emits [T0(x), T1(x), T2(x), ..., Tdegrees.Max()(x)].
+    /// Output shape: [B, Features * degrees.Length]
+    /// For each scalar x and each selected degree p, emits T_p(x) in the provided degree order.
     /// </summary>
     /// <param name="input">input tensor</param>
     /// <param name="degrees">selected Chebyshev polynomial degrees</param>
@@ -347,15 +347,15 @@ public class Tensor
         if (input._shape.Length != 2)
             throw new TensorDimensionException("Chebyshev basis requires a 2D tensor shaped [batch, features].");
 
-        // TODO: emit only selected Chebyshev degrees instead of expanding to all degrees up to Max().
-        int degree = degrees.Max();
+        int maxDegree = degrees.Max();
         int batches = input._shape[0];
         int features = input._shape[1];
-        int basisSize = degree + 1;
+        int basisSize = degrees.Length;
         int outputFeatures = features * basisSize;
 
         int[] shape = [batches, outputFeatures];
         float[] result = new float[batches * outputFeatures];
+        float[] values = new float[maxDegree + 1];
 
         for (int b = 0; b < batches; b++)
         {
@@ -367,23 +367,24 @@ public class Tensor
                 float x = input._data[inputBase + f];
                 int basisBase = outputBase + f * basisSize;
 
-                result[basisBase] = 1f;
+                values[0] = 1f;
 
-                if (degree == 0)
-                    continue;
-
-                result[basisBase + 1] = x;
+                if (maxDegree >= 1)
+                    values[1] = x;
 
                 float previous = 1f;
                 float current = x;
 
-                for (int p = 2; p <= degree; p++)
+                for (int p = 2; p <= maxDegree; p++)
                 {
                     float next = 2f * x * current - previous;
-                    result[basisBase + p] = next;
+                    values[p] = next;
                     previous = current;
                     current = next;
                 }
+
+                for (int i = 0; i < basisSize; i++)
+                    result[basisBase + i] = values[degrees[i]];
             }
         }
 
@@ -395,6 +396,8 @@ public class Tensor
 
         void Backward()
         {
+            float[] derivatives = new float[maxDegree + 1];
+
             for (int b = 0; b < batches; b++)
             {
                 int inputBase = b * features;
@@ -406,26 +409,35 @@ public class Tensor
                     float gradient = 0;
                     int basisBase = outputBase + f * basisSize;
 
-                    if (degree >= 1)
-                        gradient += o._gradients[basisBase + 1];
+                    if (maxDegree == 0)
+                    {
+                        input._gradients[inputBase + f] += gradient;
+                        continue;
+                    }
+
+                    derivatives[0] = 0f;
+                    derivatives[1] = 1f;
 
                     float previous = 1f;
                     float current = x;
                     float previousDerivative = 0f;
                     float currentDerivative = 1f;
 
-                    for (int p = 2; p <= degree; p++)
+                    for (int p = 2; p <= maxDegree; p++)
                     {
                         float next = 2f * x * current - previous;
                         float nextDerivative = 2f * current + 2f * x * currentDerivative - previousDerivative;
 
-                        gradient += o._gradients[basisBase + p] * nextDerivative;
+                        derivatives[p] = nextDerivative;
 
                         previous = current;
                         current = next;
                         previousDerivative = currentDerivative;
                         currentDerivative = nextDerivative;
                     }
+
+                    for (int i = 0; i < basisSize; i++)
+                        gradient += o._gradients[basisBase + i] * derivatives[degrees[i]];
 
                     input._gradients[inputBase + f] += gradient;
                 }

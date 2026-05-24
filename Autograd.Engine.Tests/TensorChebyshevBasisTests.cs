@@ -40,6 +40,48 @@ public class TensorChebyshevBasisTests
     }
 
     [Fact]
+    public void ChebyshevBasis_SelectedDegrees_CorrectResult()
+    {
+        var input = new Tensor([0.5f, -1f, 0f, 1f], [2, 2]);
+
+        Tensor basis = Tensor.ChebyshevBasis(input, [0, 2, 4]);
+
+        float[] result = basis.GetData();
+
+        float[] expected =
+        [
+            1f, -0.5f, -0.5f,
+            1f, 1f, 1f,
+            1f, -1f, 1f,
+            1f, 1f, 1f
+        ];
+
+        Assert.Equal(expected.Length, result.Length);
+        for (int i = 0; i < expected.Length; i++)
+            Assert.Equal(expected[i], result[i], Delta);
+    }
+
+    [Fact]
+    public void ChebyshevBasis_SelectedDegrees_CorrectShape()
+    {
+        var input = new Tensor(new float[6], [2, 3]);
+
+        Tensor basis = Tensor.ChebyshevBasis(input, [1, 3]);
+
+        Assert.Equal([2, 6], basis.GetShape());
+    }
+
+    [Fact]
+    public void ChebyshevBasis_SelectedDegrees_PreservesDegreeOrder()
+    {
+        var input = new Tensor([0.25f], [1, 1]);
+
+        Tensor basis = Tensor.ChebyshevBasis(input, [3, 0, 2]);
+
+        Assert.Equal([-0.6875f, 1f, -0.875f], basis.GetData());
+    }
+
+    [Fact]
     public void ChebyshevBasis_Backward_PropagatesGradientsToInput()
     {
         var input = new Tensor([0.5f, -0.25f], [1, 2]);
@@ -62,6 +104,20 @@ public class TensorChebyshevBasisTests
         basis.Backward();
 
         Assert.All(input.GetGradients(), g => Assert.Equal(0f, g, Delta));
+    }
+
+    [Fact]
+    public void ChebyshevBasis_SelectedDegrees_Backward_PropagatesSelectedGradientsToInput()
+    {
+        var input = new Tensor([0.5f, -0.25f], [1, 2]);
+
+        Tensor basis = Tensor.ChebyshevBasis(input, [0, 2, 4]);
+        basis.Backward();
+
+        float[] gradients = input.GetGradients();
+
+        Assert.Equal(-2f, gradients[0], Delta);
+        Assert.Equal(2.5f, gradients[1], Delta);
     }
 
     [Fact]
