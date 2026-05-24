@@ -338,11 +338,8 @@ public class Tensor
         if (degrees.Length == 0)
             throw new ArgumentException("At least one Chebyshev polynomial degree must be provided.", nameof(degrees));
 
-        for (int i = 0; i < degrees.Length; i++)
-        {
-            if (degrees[i] < 0)
-                throw new ArgumentOutOfRangeException(nameof(degrees), "Chebyshev polynomial degrees must be non-negative.");
-        }
+        if (degrees.Any(t => t < 0))
+            throw new ArgumentOutOfRangeException(nameof(degrees), "Chebyshev polynomial degrees must be non-negative.");
 
         if (input._shape.Length != 2)
             throw new TensorDimensionException("Chebyshev basis requires a 2D tensor shaped [batch, features].");
@@ -355,7 +352,7 @@ public class Tensor
 
         int[] shape = [batches, outputFeatures];
         float[] result = new float[batches * outputFeatures];
-        float[] values = new float[maxDegree + 1];
+        int[] degreeOrder = Enumerable.Range(0, basisSize).OrderBy(i => degrees[i]).ToArray();
 
         for (int b = 0; b < batches; b++)
         {
@@ -367,24 +364,35 @@ public class Tensor
                 float x = input._data[inputBase + f];
                 int basisBase = outputBase + f * basisSize;
 
-                values[0] = 1f;
-
-                if (maxDegree >= 1)
-                    values[1] = x;
-
                 float previous = 1f;
                 float current = x;
+                int nextDegreeIndex = 0;
 
-                for (int p = 2; p <= maxDegree; p++)
+                for (int degree = 0; degree <= maxDegree; degree++)
                 {
-                    float next = 2f * x * current - previous;
-                    values[p] = next;
-                    previous = current;
-                    current = next;
-                }
+                    float value;
 
-                for (int i = 0; i < basisSize; i++)
-                    result[basisBase + i] = values[degrees[i]];
+                    if (degree == 0)
+                    {
+                        value = 1f;
+                    }
+                    else if (degree == 1)
+                    {
+                        value = current;
+                    }
+                    else
+                    {
+                        value = 2f * x * current - previous;
+                        previous = current;
+                        current = value;
+                    }
+
+                    while (nextDegreeIndex < basisSize && degrees[degreeOrder[nextDegreeIndex]] == degree)
+                    {
+                        result[basisBase + degreeOrder[nextDegreeIndex]] = value;
+                        nextDegreeIndex++;
+                    }
+                }
             }
         }
 
@@ -396,8 +404,6 @@ public class Tensor
 
         void Backward()
         {
-            float[] derivatives = new float[maxDegree + 1];
-
             for (int b = 0; b < batches; b++)
             {
                 int inputBase = b * features;
@@ -415,29 +421,41 @@ public class Tensor
                         continue;
                     }
 
-                    derivatives[0] = 0f;
-                    derivatives[1] = 1f;
-
                     float previous = 1f;
                     float current = x;
                     float previousDerivative = 0f;
                     float currentDerivative = 1f;
+                    int nextDegreeIndex = 0;
 
-                    for (int p = 2; p <= maxDegree; p++)
+                    for (int degree = 0; degree <= maxDegree; degree++)
                     {
-                        float next = 2f * x * current - previous;
-                        float nextDerivative = 2f * current + 2f * x * currentDerivative - previousDerivative;
+                        float derivative;
 
-                        derivatives[p] = nextDerivative;
+                        if (degree == 0)
+                        {
+                            derivative = 0f;
+                        }
+                        else if (degree == 1)
+                        {
+                            derivative = currentDerivative;
+                        }
+                        else
+                        {
+                            float next = 2f * x * current - previous;
+                            derivative = 2f * current + 2f * x * currentDerivative - previousDerivative;
 
-                        previous = current;
-                        current = next;
-                        previousDerivative = currentDerivative;
-                        currentDerivative = nextDerivative;
+                            previous = current;
+                            current = next;
+                            previousDerivative = currentDerivative;
+                            currentDerivative = derivative;
+                        }
+
+                        while (nextDegreeIndex < basisSize && degrees[degreeOrder[nextDegreeIndex]] == degree)
+                        {
+                            gradient += o._gradients[basisBase + degreeOrder[nextDegreeIndex]] * derivative;
+                            nextDegreeIndex++;
+                        }
                     }
-
-                    for (int i = 0; i < basisSize; i++)
-                        gradient += o._gradients[basisBase + i] * derivatives[degrees[i]];
 
                     input._gradients[inputBase + f] += gradient;
                 }
