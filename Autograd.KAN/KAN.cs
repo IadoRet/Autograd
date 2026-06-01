@@ -62,13 +62,13 @@ public class KAN
 
     private void AddPolynomialLayer(int outputSize, int[] degrees, BasisType basis)
     {
-        int previousOutputSize = _layers.Any() ? _layers.Last().GetOutputSize() : _inputSize;
+        int previousOutputSize = _layers.Count != 0 ? _layers.Last().GetOutputSize() : _inputSize;
         _layers.Add(new PolynomialLayer(previousOutputSize, outputSize, basis, degrees, _random));
     }
 
     private void AddSplineLayer(int outputSize, int gridSize, int splineOrder, float gridMin, float gridMax)
     {
-        int previousOutputSize = _layers.Any() ? _layers.Last().GetOutputSize() : _inputSize;
+        int previousOutputSize = _layers.Count != 0 ? _layers.Last().GetOutputSize() : _inputSize;
         _layers.Add(new SplineLayer(previousOutputSize, outputSize, gridSize, splineOrder, gridMin, gridMax, _random));
     }
 

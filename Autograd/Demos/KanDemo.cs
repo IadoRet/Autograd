@@ -26,13 +26,15 @@ public class KanDemo : IDemo
             new("Polynomial 0..2", "poly_full_2", () => KAN.KAN.Create(2, ModelSeed)
                                                                .WithPolynomialOutput(1, [0, 1, 2])),
             new("Polynomial [2]", "poly_2", () => KAN.KAN.Create(2, ModelSeed)
-                                                            .WithPolynomialOutput(1, [2])),
+                                                         .WithPolynomialOutput(1, [2])),
             new("Polynomial [0,2]", "poly_0_2", () => KAN.KAN.Create(2, ModelSeed)
-                                                                .WithPolynomialOutput(1, [0, 2])),
+                                                             .WithPolynomialOutput(1, [0, 2])),
             new("Polynomial [0,1]", "poly_0_1", () => KAN.KAN.Create(2, ModelSeed)
-                                                                .WithPolynomialOutput(1, [0, 1])),
+                                                             .WithPolynomialOutput(1, [0, 1])),
             new("Chebyshev 0..2", "cheb_full_2", () => KAN.KAN.Create(2, ModelSeed)
-                                                               .WithPolynomialOutput(1, [0, 1, 2], BasisType.Chebyshev))
+                                                              .WithPolynomialOutput(1, [0, 1, 2], BasisType.Chebyshev)),
+            new("Cubic B-spline", "spline_cubic", () => KAN.KAN.Create(2, ModelSeed)
+                                                               .WithSplineOutput(1, gridSize: 5, splineOrder: 3, gridMin: -2f, gridMax: 2f))
         ];
 
         List<ExperimentResult> results = [];
