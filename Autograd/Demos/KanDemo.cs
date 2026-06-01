@@ -6,7 +6,7 @@ namespace Autograd.Demos;
 
 public class KanDemo : IDemo
 {
-    private const int Epochs = 120;
+    private const int Epochs = 360;
     private const int DataSize = 32;
     private const int ValidationSize = 200;
     private const int CheckpointInterval = 20;
@@ -34,7 +34,7 @@ public class KanDemo : IDemo
             new("Chebyshev 0..2", "cheb_full_2", () => KAN.KAN.Create(2, ModelSeed)
                                                               .WithPolynomialOutput(1, [0, 1, 2], BasisType.Chebyshev)),
             new("Cubic B-spline", "spline_cubic", () => KAN.KAN.Create(2, ModelSeed)
-                                                               .WithSplineOutput(1, gridSize: 5, splineOrder: 3, gridMin: -2f, gridMax: 2f))
+                                                               .WithSplineOutput(1, gridSize: 8, splineOrder: 3, gridMin: -3f, gridMax: 3f))
         ];
 
         List<ExperimentResult> results = [];
@@ -129,16 +129,16 @@ public class KanDemo : IDemo
     private static void PrintSummary(List<ExperimentResult> results)
     {
         Console.WriteLine("SUMMARY");
-        Console.WriteLine("Basis              Epoch 1    Epoch 20   Epoch 60   Epoch 120  Time ms");
+        Console.WriteLine("Basis              Epoch 1    Epoch 20   Epoch 60   Epoch 360  Time ms");
 
         foreach (ExperimentResult result in results.OrderBy(r => r.FinalLoss))
         {
             float epoch1 = FindLoss(result, 1);
             float epoch20 = FindLoss(result, 20);
             float epoch60 = FindLoss(result, 60);
-            float epoch120 = FindLoss(result, 120);
+            float epoch360 = FindLoss(result, 360);
 
-            Console.WriteLine($"{result.Name,-18}{epoch1,10:0.0000}{epoch20,11:0.0000}{epoch60,11:0.0000}{epoch120,11:0.0000}{result.ElapsedMilliseconds,9}");
+            Console.WriteLine($"{result.Name,-18}{epoch1,10:0.0000}{epoch20,11:0.0000}{epoch60,11:0.0000}{epoch360,11:0.0000}{result.ElapsedMilliseconds,9}");
         }
     }
 
@@ -162,7 +162,7 @@ public class KanDemo : IDemo
 
     private static float Fn(float a, float b)
     {
-        return 3 * MathF.Pow(a, 2) + MathF.Pow(b, 2) - 5;
+        return MathF.Sin(3f * a) + 0.5f * MathF.Cos(5f * b) + MathF.Pow(a, 2f); 
     }
 
     private sealed record Experiment(string Name, string FileName, Func<KAN.KAN> CreateModel);
