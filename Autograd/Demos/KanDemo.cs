@@ -11,7 +11,7 @@ public class KanDemo : IDemo
     private const int ValidationSize = 200;
     private const int CheckpointInterval = 20;
     private const int Grid = 50;
-    private const float Range = 3f;
+    private const float Range = 2f;
     private const float LearningRate = 0.001f;
     private const int ModelSeed = 328;
     private const int TrainingSeed = 1207;
@@ -34,7 +34,11 @@ public class KanDemo : IDemo
             new("Chebyshev 0..2", "cheb_full_2", () => KAN.KAN.Create(2, ModelSeed)
                                                               .WithPolynomialOutput(1, [0, 1, 2], BasisType.Chebyshev)),
             new("Cubic B-spline", "spline_cubic", () => KAN.KAN.Create(2, ModelSeed)
-                                                               .WithSplineOutput(1, gridSize: 8, splineOrder: 3, gridMin: -3f, gridMax: 3f))
+                                                               .WithSplineOutput(1, gridSize: 8, splineOrder: 3, gridMin: -2f, gridMax: 2f)),
+            new("Compound", "compound", () => KAN.KAN.Create(2, ModelSeed)
+                                                     .WithSplineLayer(8, gridSize: 12, splineOrder: 5, gridMin: -2f, gridMax: 2f)
+                                                     .WithPolynomialOutput(1, [0, 1, 2, 3, 5 ], BasisType.Chebyshev))
+            
         ];
 
         List<ExperimentResult> results = [];
@@ -162,7 +166,7 @@ public class KanDemo : IDemo
 
     private static float Fn(float a, float b)
     {
-        return MathF.Sin(3f * a) + 0.5f * MathF.Cos(5f * b) + MathF.Pow(a, 2f); 
+        return MathF.Tanh(3f * a + b) + 0.5f * MathF.Exp(b * 0.2f + a * -0.2f); 
     }
 
     private sealed record Experiment(string Name, string FileName, Func<KAN.KAN> CreateModel);
