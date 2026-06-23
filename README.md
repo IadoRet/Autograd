@@ -12,13 +12,12 @@ MLP, CNN, and KAN implementations in .NET. Implemented mostly for learning and e
 
 ## Running
 
+At the moment the console app runs the KAN demo by default. Other demos can be enabled in `Autograd/Program.cs`.
 The project targets .NET 10.0.
 
 ```bash
 dotnet run --project Autograd
 ```
-
-At the moment the console app runs the KAN demo by default. Other demos can be enabled in `Autograd/Program.cs`.
 
 ```bash
 dotnet test Autograd.slnx
