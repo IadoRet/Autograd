@@ -4,6 +4,8 @@ namespace Autograd.KAN.Abstractions;
 
 public interface IKANLayer
 {
+    int ParameterCount { get; }
+
     int GetOutputSize();
     
     Tensor Forward(Tensor input);

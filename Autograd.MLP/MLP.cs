@@ -11,18 +11,26 @@ namespace Autograd.MLP;
 public class MLP
 {
     private readonly int _inputSize;
-    private LinkedList<Layer> _layers;
-    private Random _random = new Random();
+    private readonly LinkedList<Layer> _layers;
+    private readonly Random _random;
 
-    private MLP(int inputSize)
+    public int ParameterCount => _layers.Sum(layer => layer.ParameterCount);
+
+    private MLP(int inputSize, Random random)
     {
         _inputSize = inputSize;
+        _random = random;
         _layers = [];
     }
 
     public static MLP Create(int inputSize)
     {
-        return new MLP(inputSize);
+        return new MLP(inputSize, new Random());
+    }
+
+    public static MLP Create(int inputSize, int seed)
+    {
+        return new MLP(inputSize, new Random(seed));
     }
 
     public MLP WithLayer(int outputSize, ActivationType activation)

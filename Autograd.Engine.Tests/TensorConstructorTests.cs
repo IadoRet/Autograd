@@ -41,4 +41,54 @@ public class TensorConstructorTests
 
         Assert.Equal(0f, t.GetGradients()[0]);
     }
+
+    [Fact]
+    public void Constructor_CopiesInputArrays()
+    {
+        float[] data = [1f, 2f];
+        int[] shape = [2];
+        var tensor = new Tensor(data, shape);
+
+        data[0] = 99f;
+        shape[0] = 1;
+
+        Assert.Equal([1f, 2f], tensor.GetData());
+        Assert.Equal([2], tensor.GetShape());
+    }
+
+    [Fact]
+    public void Constructor_DataLengthDoesNotMatchShape_ThrowsArgumentException()
+    {
+        Assert.Throws<ArgumentException>(() => new Tensor([1f], [2]));
+    }
+
+    [Fact]
+    public void Constructor_NegativeDimension_ThrowsArgumentOutOfRangeException()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new Tensor([], [-1]));
+    }
+
+    [Fact]
+    public void Constructor_ShapeProductOverflow_ThrowsArgumentException()
+    {
+        Assert.Throws<ArgumentException>(() => new Tensor([], [int.MaxValue, int.MaxValue, 3]));
+    }
+
+    [Fact]
+    public void Constructor_EmptyShapeCreatesScalar()
+    {
+        var tensor = new Tensor([3f], []);
+
+        Assert.Empty(tensor.GetShape());
+        Assert.Equal([3f], tensor.GetData());
+    }
+
+    [Fact]
+    public void Empty_ReturnsConsistentZeroLengthTensor()
+    {
+        Tensor tensor = Tensor.Empty;
+
+        Assert.Equal([0], tensor.GetShape());
+        Assert.Empty(tensor.GetData());
+    }
 }

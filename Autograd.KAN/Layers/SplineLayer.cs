@@ -28,6 +28,8 @@ public class SplineLayer : IKANLayer
     /// </summary>
     private readonly int _outputSize;
 
+    public int ParameterCount => _c.ElementCount + _b.ElementCount;
+
     public SplineLayer(int inputSize, int outputSize, int gridSize, int splineOrder, float gridMin, float gridMax, Random random)
     {
         ArgumentNullException.ThrowIfNull(random);

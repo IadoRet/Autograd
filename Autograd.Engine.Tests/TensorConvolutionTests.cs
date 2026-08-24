@@ -338,4 +338,13 @@ public class TensorConvolutionTests
         // kGrad[1] = 2+3+4 = 9
         Assert.Equal(9f, kGrad[1], Delta);
     }
+
+    [Fact]
+    public void Convolution_KernelLargerThanInput_ThrowsTensorDimensionException()
+    {
+        var input = new Tensor(new float[4], [1, 1, 2, 2]);
+        var kernel = new Tensor(new float[9], [1, 1, 3, 3]);
+
+        Assert.Throws<TensorDimensionException>(() => Tensor.Convolution(input, kernel));
+    }
 }

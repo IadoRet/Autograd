@@ -1,895 +1,119 @@
-﻿using Autograd.Engine.Exceptions;
-
 namespace Autograd.Engine.Core;
 
 /// <summary>
-/// Tensor
+/// A dense tensor that records the operations required for reverse-mode automatic differentiation.
 /// </summary>
-public class Tensor
+public partial class Tensor
 {
     private readonly float[] _data;
-    
     private readonly int[] _shape;
-    private readonly int[] _strides; //todo: remove?
-
     private readonly float[] _gradients;
-    
-    private readonly Tensor[] _leaves;
-    
+    private readonly Tensor[] _parents;
+
     private Action? _backward;
-    
-    public static Tensor Empty => new Tensor([], []);
 
-    public Tensor(float[] data, int[] shape, params Span<Tensor> leaves)
-    {
-        _data = data;
-        _shape = shape;
-        _leaves = leaves.ToArray();
-        _backward = null;
-        _gradients = new float[_data.Length];
-        _strides = new int[shape.Length];
-        _strides[shape.Length - 1] = 1;
-        for (int i = shape.Length - 2; i >= 0; i--)
-            _strides[i] = _strides[i + 1] * shape[i + 1];
-    }
+    public int ElementCount => _data.Length;
 
     /// <summary>
-    /// Matrix multiplication
+    /// An empty one-dimensional tensor.
     /// </summary>
-    /// <param name="t1">tensor 1</param>
-    /// <param name="t2">tensor 2</param>
-    /// <exception cref="TensorDimensionException">Dimension mismatch</exception>
-    public static Tensor operator *(Tensor t1, Tensor t2)
-    {
-        // Dimensions: 
-        // T1: m x k, T2: k x n, o: m x n, T1^T: k x m, T2^T: n x k
-        
-        int m = t1._shape[^2];
-        int n = t2._shape[^1];
-        int k = t1._shape[^1];
-
-        if (k != t2._shape[^2])
-            throw new TensorDimensionException($"Dimensions do not match. t1 inner dim [{k}] != t2 outer dim [{t2._shape[^2]}].");
-
-        int[] shape = new int[t1._shape.Length];
-        for (int i = 0; i < t1._shape.Length - 2; i++)
-        {
-            if (t1._shape[i] != t2._shape[i])
-                throw new TensorDimensionException($"Dimensions do not match. Dimension: [{i}].");
-            
-            shape[i] = t1._shape[i];
-        }
-            
-        shape[^2] = m;
-        shape[^1] = n;
-        
-        float[] data = Multiply(t1._data, t2._data, shape, m, n, k);
-        
-        Tensor o = new (data, shape, t1, t2);
-        
-        o._backward = Backward;
-        
-        return o;
-        
-        void Backward()
-        {
-            //grad(C) * T2^T -> m x k
-            float[] t1Gradients = Multiply(o._gradients, t2._data, t1._shape, m, k, n, tposeT2: true);
-            //T1^T * grad(C) -> k x n
-            float[] t2Gradients = Multiply(t1._data, o._gradients, t2._shape, k, n, m, tposeT1: true);
-            
-            for (int i = 0; i < t1Gradients.Length; i++)
-                t1._gradients[i] += t1Gradients[i];
-            
-            for (int i = 0; i < t2Gradients.Length; i++)
-                t2._gradients[i] += t2Gradients[i];
-        }
-    }
+    public static Tensor Empty => new([], [0]);
 
     /// <summary>
-    /// Matrix multiplication
+    /// Creates a tensor and takes copies of the supplied data and shape.
+    /// An empty shape represents a scalar and therefore requires exactly one value.
     /// </summary>
-    /// <param name="t1">tensor 1</param>
-    /// <param name="t2">tensor 2</param>
-    /// <param name="shape">shape (should be identical)</param>
-    /// <param name="m">m</param>
-    /// <param name="n">n</param>
-    /// <param name="k">k</param>
-    /// <param name="tposeT1">transpose tensor 1</param>
-    /// <param name="tposeT2">transpose tensor 2</param>
-    // ReSharper disable once InconsistentNaming
-    private static float[] Multiply(float[] t1, float[] t2, int[] shape, int m, int n, int k, bool tposeT1 = false, bool tposeT2 = false)
+    public Tensor(float[] data, int[] shape)
+        : this(data, shape, [], takeOwnership: false)
     {
-        int dim = shape.Aggregate(1, (a, b) => a * b);
-        float[] result = new float[dim];
-        int batches = 1;
-        for (int i = 0; i < shape.Length - 2; i++)
-            batches *= shape[i];
+    }
 
-        for (int b = 0; b < batches; b++)
+    private Tensor(float[] data, int[] shape, Tensor[] parents, bool takeOwnership)
+    {
+        ArgumentNullException.ThrowIfNull(data);
+        ArgumentNullException.ThrowIfNull(shape);
+        ArgumentNullException.ThrowIfNull(parents);
+
+        ValidateElementCount(data.Length, shape);
+
+        _data = takeOwnership ? data : data.ToArray();
+        _shape = takeOwnership ? shape : shape.ToArray();
+        _parents = parents;
+        _gradients = new float[data.Length];
+    }
+
+    private static Tensor CreateOperation(float[] data, int[] shape, params Tensor[] parents)
+    {
+        return new Tensor(data, shape, parents, takeOwnership: true);
+    }
+
+    private static void ValidateElementCount(int dataLength, int[] shape)
+    {
+        long elementCount = 1;
+
+        try
         {
-            int offsetT1 = b * m * k;
-            int offsetT2 = b * k * n;
-            int offsetR = b * m * n;
-
-            for (int i = 0; i < m; i++)
+            checked
             {
-                for (int j = 0; j < n; j++)
+                foreach (int dimension in shape)
                 {
-                    for (int q = 0; q < k; q++)
-                    {
-                        int t1Index = tposeT1 ?  offsetT1 + q * m + i : offsetT1 + i * k + q;
-                        int t2Index = tposeT2 ? offsetT2 + j * k + q : offsetT2 + q * n + j;
-                        result[offsetR + i * n + j] += t1[t1Index] * t2[t2Index];
-                    }
+                    if (dimension < 0)
+                        throw new ArgumentOutOfRangeException(nameof(shape), "Tensor dimensions must be non-negative.");
+
+                    elementCount *= dimension;
                 }
             }
         }
+        catch (OverflowException exception)
+        {
+            throw new ArgumentException("Tensor shape is too large.", nameof(shape), exception);
+        }
 
-        return result;
+        if (elementCount != dataLength)
+        {
+            throw new ArgumentException(
+                $"Data length [{dataLength}] does not match the shape element count [{elementCount}].",
+                nameof(shape));
+        }
     }
-    
-    /// <summary>
-    /// Matrix additions
-    /// </summary>
-    /// <param name="t1">tensor 1</param>
-    /// <param name="t2">tensor 2</param>
-    /// <exception cref="TensorDimensionException">Dimension mismatch</exception>
-    public static Tensor operator+(Tensor t1, Tensor t2)
+
+    private static bool HaveSameShape(Tensor left, Tensor right)
     {
-        int len = Math.Max(t1._shape.Length, t2._shape.Length);
-        
-        //Matching shapes [3, 5] + [5] => [3, 5] + [1, 5]
-        Span<int> t1Shape = stackalloc int[len];
-        Span<int> t2Shape = stackalloc int[len];
-
-        int[] t1Strides = new int[len];
-        int[] t2Strides = new int[len];
-        
-        int[] shape = new int[len];
-        
-        int dim = 1;
-
-        for (int i = shape.Length - 1; i >= 0; i--)
-        {
-            int i1 = i - (shape.Length - t1._shape.Length);
-            int s1 = i1 < 0 ? 1 : t1._shape[i1];
-            t1Shape[i] = s1;
-            int i2 = i - (shape.Length - t2._shape.Length);
-            int s2 = i2 < 0 ? 1 : t2._shape[i2];
-            t2Shape[i] = s2;
-
-            if (i < shape.Length - 1)
-            {
-                t1Strides[i] = t1Strides[i + 1] * t1Shape[i + 1];
-                t2Strides[i] = t2Strides[i + 1] * t2Shape[i + 1];
-            }
-            else
-            {
-                t1Strides[i] = 1;
-                t2Strides[i] = 1;
-            }
-
-            // invalid operation, for example [5, 4] + [1, 5] (but [5, 4] + [1, 4] - valid).
-            if (s1 != s2 && s1 != 1 && s2 != 1)
-                throw new TensorDimensionException($"Dimensions do not match. Dimension: [{i}]. Shapes: [{s1}] <=> [{s2}]");
-            
-            int max = Math.Max(s1, s2);
-            shape[i] = max;
-            dim *= max;
-        }
-
-        for (int i = 0; i < len; i++)
-        {
-            t1Strides[i] = t1Shape[i] == 1 ? 0 : t1Strides[i];
-            t2Strides[i] = t2Shape[i] == 1 ? 0 : t2Strides[i];
-        }
-
-        float[] result = new float[dim];
-
-        for (int i = 0; i < dim; i++)
-        {
-            int c = i;
-            int c1 = 0;
-            int c2 = 0;
-            
-            for (int j = len - 1; j >= 0; j--)
-            {
-                int jShape = shape[j];
-                int coord = c % jShape;
-                c /= jShape;
-                c1 += coord * t1Strides[j];
-                c2 += coord * t2Strides[j];
-            }
-            
-            result[i] = t1._data[c1] + t2._data[c2];
-        }
-
-        Tensor o = new(result, shape, t1, t2);
-        
-        o._backward = Backward;
-
-        return o;
-
-        void Backward()
-        {
-            for (int i = 0; i < dim; i++)
-            {
-                int c = i;
-                int c1 = 0;
-                int c2 = 0;
-    
-                for (int j = len - 1; j >= 0; j--)
-                {
-                    int coord = c % shape[j];
-                    c /= shape[j];
-                    c1 += coord * t1Strides[j];
-                    c2 += coord * t2Strides[j];
-                }
-    
-                t1._gradients[c1] += o._gradients[i];
-                t2._gradients[c2] += o._gradients[i];
-            }
-        }
+        return left._shape.AsSpan().SequenceEqual(right._shape);
     }
 
     /// <summary>
-    /// Polynomial basis expansion for selected degrees.
-    /// Input shape:  [B, Features]
-    /// Output shape: [B, Features * degrees.Length]
-    /// For each scalar x and each selected degree p, emits x^p in the provided degree order.
-    /// </summary>
-    /// <param name="input">input tensor</param>
-    /// <param name="degrees">selected polynomial degrees</param>
-    /// <exception cref="ArgumentException">Degrees are empty</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Any selected degree is negative</exception>
-    /// <exception cref="TensorDimensionException">Input is not a 2D tensor</exception>
-    public static Tensor PolynomialBasis(Tensor input, int[] degrees)
-    {
-        ArgumentNullException.ThrowIfNull(degrees);
-
-        if (degrees.Length == 0)
-            throw new ArgumentException("At least one polynomial degree must be provided.", nameof(degrees));
-
-        for (int i = 0; i < degrees.Length; i++)
-        {
-            if (degrees[i] < 0)
-                throw new ArgumentOutOfRangeException(nameof(degrees), "Polynomial degrees must be non-negative.");
-        }
-
-        if (input._shape.Length != 2)
-            throw new TensorDimensionException("Polynomial basis requires a 2D tensor shaped [batch, features].");
-
-        int batches = input._shape[0];
-        int features = input._shape[1];
-        int basisSize = degrees.Length;
-        int outputFeatures = features * basisSize;
-
-        int[] shape = [batches, outputFeatures];
-        float[] result = new float[batches * outputFeatures];
-
-        for (int b = 0; b < batches; b++)
-        {
-            int inputBase = b * features;
-            int outputBase = b * outputFeatures;
-
-            for (int f = 0; f < features; f++)
-            {
-                float x = input._data[inputBase + f];
-                int basisBase = outputBase + f * basisSize;
-
-                for (int i = 0; i < basisSize; i++)
-                {
-                    int degree = degrees[i];
-                    result[basisBase + i] = MathF.Pow(x, degree);
-                }
-            }
-        }
-
-        Tensor o = new(result, shape, input);
-
-        o._backward = Backward;
-
-        return o;
-
-        void Backward()
-        {
-            for (int b = 0; b < batches; b++)
-            {
-                int inputBase = b * features;
-                int outputBase = b * outputFeatures;
-
-                for (int f = 0; f < features; f++)
-                {
-                    float x = input._data[inputBase + f];
-                    float gradient = 0;
-                    int basisBase = outputBase + f * basisSize;
-
-                    for (int i = 0; i < basisSize; i++)
-                    {
-                        int degree = degrees[i];
-                        if (degree == 0)
-                            continue;
-
-                        gradient += o._gradients[basisBase + i] * degree * MathF.Pow(x, degree - 1);
-                    }
-
-                    input._gradients[inputBase + f] += gradient;
-                }
-            }
-        }
-    }
-
-    /// <summary>
-    /// Chebyshev polynomial basis expansion for selected degrees.
-    /// Input shape:  [B, Features]
-    /// Output shape: [B, Features * degrees.Length]
-    /// For each scalar x and each selected degree p, emits T_p(x) in the provided degree order.
-    /// </summary>
-    /// <param name="input">input tensor</param>
-    /// <param name="degrees">selected Chebyshev polynomial degrees</param>
-    /// <exception cref="ArgumentException">Degrees are empty</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Any selected degree is negative</exception>
-    /// <exception cref="TensorDimensionException">Input is not a 2D tensor</exception>
-    public static Tensor ChebyshevBasis(Tensor input, int[] degrees)
-    {
-        ArgumentNullException.ThrowIfNull(degrees);
-
-        if (degrees.Length == 0)
-            throw new ArgumentException("At least one Chebyshev polynomial degree must be provided.", nameof(degrees));
-
-        if (degrees.Any(t => t < 0))
-            throw new ArgumentOutOfRangeException(nameof(degrees), "Chebyshev polynomial degrees must be non-negative.");
-
-        if (input._shape.Length != 2)
-            throw new TensorDimensionException("Chebyshev basis requires a 2D tensor shaped [batch, features].");
-
-        int maxDegree = degrees.Max();
-        int batches = input._shape[0];
-        int features = input._shape[1];
-        int basisSize = degrees.Length;
-        int outputFeatures = features * basisSize;
-
-        int[] shape = [batches, outputFeatures];
-        float[] result = new float[batches * outputFeatures];
-        int[] degreeOrder = Enumerable.Range(0, basisSize).OrderBy(i => degrees[i]).ToArray();
-
-        for (int b = 0; b < batches; b++)
-        {
-            int inputBase = b * features;
-            int outputBase = b * outputFeatures;
-
-            for (int f = 0; f < features; f++)
-            {
-                float x = input._data[inputBase + f];
-                int basisBase = outputBase + f * basisSize;
-
-                float previous = 1f;
-                float current = x;
-                int nextDegreeIndex = 0;
-
-                for (int degree = 0; degree <= maxDegree; degree++)
-                {
-                    float value;
-
-                    switch (degree)
-                    {
-                        case 0:
-                            value = 1f;
-                            break;
-                        case 1:
-                            value = current;
-                            break;
-                        default:
-                            value = 2f * x * current - previous;
-                            previous = current;
-                            current = value;
-                            break;
-                    }
-
-                    while (nextDegreeIndex < basisSize && degrees[degreeOrder[nextDegreeIndex]] == degree)
-                    {
-                        result[basisBase + degreeOrder[nextDegreeIndex]] = value;
-                        nextDegreeIndex++;
-                    }
-                }
-            }
-        }
-
-        Tensor o = new(result, shape, input);
-
-        o._backward = Backward;
-
-        return o;
-
-        void Backward()
-        {
-            for (int b = 0; b < batches; b++)
-            {
-                int inputBase = b * features;
-                int outputBase = b * outputFeatures;
-
-                for (int f = 0; f < features; f++)
-                {
-                    float x = input._data[inputBase + f];
-                    float gradient = 0;
-                    int basisBase = outputBase + f * basisSize;
-
-                    if (maxDegree == 0)
-                    {
-                        input._gradients[inputBase + f] += gradient;
-                        continue;
-                    }
-
-                    float previous = 1f;
-                    float current = x;
-                    float previousDerivative = 0f;
-                    float currentDerivative = 1f;
-                    int nextDegreeIndex = 0;
-
-                    for (int degree = 0; degree <= maxDegree; degree++)
-                    {
-                        float derivative;
-
-                        switch (degree)
-                        {
-                            case 0:
-                                derivative = 0f;
-                                break;
-                            case 1:
-                                derivative = currentDerivative;
-                                break;
-                            default:
-                            {
-                                float next = 2f * x * current - previous;
-                                derivative = 2f * current + 2f * x * currentDerivative - previousDerivative;
-
-                                previous = current;
-                                current = next;
-                                previousDerivative = currentDerivative;
-                                currentDerivative = derivative;
-                                break;
-                            }
-                        }
-
-                        while (nextDegreeIndex < basisSize && degrees[degreeOrder[nextDegreeIndex]] == degree)
-                        {
-                            gradient += o._gradients[basisBase + degreeOrder[nextDegreeIndex]] * derivative;
-                            nextDegreeIndex++;
-                        }
-                    }
-
-                    input._gradients[inputBase + f] += gradient;
-                }
-            }
-        }
-    }
-
-    /// <summary>
-    /// B-spline basis expansion on a uniform extended knot grid.
-    /// Input shape:  [B, Features]
-    /// Output shape: [B, Features * (gridSize + splineOrder)]
-    /// </summary>
-    /// <param name="input">input tensor</param>
-    /// <param name="gridSize">number of intervals in the core grid</param>
-    /// <param name="splineOrder">spline polynomial degree</param>
-    /// <param name="gridMin">left boundary of the core grid</param>
-    /// <param name="gridMax">right boundary of the core grid</param>
-    /// <exception cref="ArgumentOutOfRangeException">Grid size, spline order, or grid range is invalid</exception>
-    /// <exception cref="TensorDimensionException">Input is not a 2D tensor</exception>
-    public static Tensor BSplineBasis(Tensor input, int gridSize, int splineOrder, float gridMin, float gridMax)
-    {
-        if (gridSize <= 0)
-            throw new ArgumentOutOfRangeException(nameof(gridSize), "B-spline grid size must be positive.");
-
-        if (splineOrder < 0)
-            throw new ArgumentOutOfRangeException(nameof(splineOrder), "B-spline order must be non-negative.");
-
-        if (gridMax <= gridMin)
-            throw new ArgumentOutOfRangeException(nameof(gridMax), "B-spline grid max must be greater than grid min.");
-
-        if (input._shape.Length != 2)
-            throw new TensorDimensionException("B-spline basis requires a 2D tensor shaped [batch, features].");
-
-        int batches = input._shape[0];
-        int features = input._shape[1];
-        int basisSize = gridSize + splineOrder;
-        int outputFeatures = features * basisSize;
-
-        int[] shape = [batches, outputFeatures];
-        float[] result = new float[batches * outputFeatures];
-        float[] knots = CreateUniformBSplineKnots(gridSize, splineOrder, gridMin, gridMax);
-        float[] basis = new float[knots.Length - 1];
-
-        for (int b = 0; b < batches; b++)
-        {
-            int inputBase = b * features;
-            int outputBase = b * outputFeatures;
-
-            for (int f = 0; f < features; f++)
-            {
-                float x = input._data[inputBase + f];
-                int basisBase = outputBase + f * basisSize;
-
-                FillBSplineBasis(x, knots, splineOrder, basis);
-
-                for (int i = 0; i < basisSize; i++)
-                    result[basisBase + i] = basis[i];
-            }
-        }
-
-        Tensor o = new(result, shape, input);
-
-        o._backward = Backward;
-
-        return o;
-
-        void Backward()
-        {
-            if (splineOrder == 0)
-                return;
-
-            float[] lowerBasis = new float[knots.Length - 1];
-
-            for (int b = 0; b < batches; b++)
-            {
-                int inputBase = b * features;
-                int outputBase = b * outputFeatures;
-
-                for (int f = 0; f < features; f++)
-                {
-                    float x = input._data[inputBase + f];
-                    float gradient = 0;
-                    int basisBase = outputBase + f * basisSize;
-
-                    FillBSplineBasis(x, knots, splineOrder - 1, lowerBasis);
-
-                    for (int i = 0; i < basisSize; i++)
-                    {
-                        float derivative = BSplineDerivative(knots, lowerBasis, splineOrder, i);
-                        gradient += o._gradients[basisBase + i] * derivative;
-                    }
-
-                    input._gradients[inputBase + f] += gradient;
-                }
-            }
-        }
-    }
-
-    private static float[] CreateUniformBSplineKnots(int gridSize, int splineOrder, float gridMin, float gridMax)
-    {
-        int knotCount = gridSize + 2 * splineOrder + 1;
-        float step = (gridMax - gridMin) / gridSize;
-        float[] knots = new float[knotCount];
-
-        for (int i = 0; i < knotCount; i++)
-            knots[i] = gridMin + (i - splineOrder) * step;
-
-        return knots;
-    }
-
-    private static void FillBSplineBasis(float x, float[] knots, int splineDegree, float[] basis)
-    {
-        int intervalCount = knots.Length - 1;
-        Array.Clear(basis, 0, intervalCount);
-
-        for (int i = 0; i < intervalCount; i++)
-        {
-            if (IsInsideKnotInterval(x, knots[i], knots[i + 1], i, intervalCount))
-                basis[i] = 1f;
-        }
-
-        for (int degree = 1; degree <= splineDegree; degree++)
-        {
-            int basisCount = intervalCount - degree;
-
-            for (int i = 0; i < basisCount; i++)
-            {
-                float leftDenominator = knots[i + degree] - knots[i];
-                float rightDenominator = knots[i + degree + 1] - knots[i + 1];
-
-                float left = leftDenominator == 0f ? 0f : (x - knots[i]) / leftDenominator * basis[i];
-                float right = rightDenominator == 0f ? 0f : (knots[i + degree + 1] - x) / rightDenominator * basis[i + 1];
-
-                basis[i] = left + right;
-            }
-        }
-
-    }
-
-    private static bool IsInsideKnotInterval(float x, float left, float right, int intervalIndex, int intervalCount)
-    {
-        return x >= left && x < right || (intervalIndex == intervalCount - 1 && x == right);
-    }
-
-    private static float BSplineDerivative(float[] knots, float[] lowerBasis, int splineOrder, int basisIndex)
-    {
-        float leftDenominator = knots[basisIndex + splineOrder] - knots[basisIndex];
-        float rightDenominator = knots[basisIndex + splineOrder + 1] - knots[basisIndex + 1];
-
-        float left = leftDenominator == 0f ? 0f : splineOrder / leftDenominator * lowerBasis[basisIndex];
-        float right = rightDenominator == 0f ? 0f : splineOrder / rightDenominator * lowerBasis[basisIndex + 1];
-
-        return left - right;
-    }
-
-    /// <summary>
-    /// N-dimensional convolution.
-    /// Input shape:  [B, InC, spatial_1, ..., spatial_N]
-    /// Kernel shape: [OutC, InC, k_1, ..., k_N]
-    /// Output shape: [B, OutC, spatial_i - k_i + 1, ...]
-    /// For 2D case: O[b, o, y, x] = Sum_ic Sum_ky Sum_kx (T[b, ic, y+ky, x+kx] * K[o, ic, ky, kx])
-    /// <param name="t">input tensor</param>
-    /// <param name="kernel">convolution kernel</param>
-    /// <exception cref="TensorDimensionException">Dimension mismatch</exception>
-    /// </summary>
-    public static Tensor Convolution(Tensor t, Tensor kernel)
-    {
-        if (t._shape.Length < 3)
-            throw new TensorDimensionException("Convolution requires at least 3 dimensions.");
-
-        if (t._shape.Length != kernel._shape.Length)
-            throw new TensorDimensionException("Tensor and kernel dimensions do not match.");
-
-        if (t._shape[1] != kernel._shape[1])
-            throw new TensorDimensionException($"Input channels do not match. Input: [{t._shape[1]}], kernel: [{kernel._shape[1]}].");
-
-        int length = t._shape.Length;
-
-        int batches = t._shape[0];
-        int inChannels = t._shape[1];
-        int outChannels = kernel._shape[0];
-
-        // Number of spatial axes
-        int spatialDims = length - 2;
-
-        int[] shape = new int[length];
-        shape[0] = batches;
-        shape[1] = outChannels;
-
-        // Total element counts along spatial axes
-        int outputSpatialSize = 1;
-        int kernelSpatialSize = 1;
-        int inputSpatialSize = 1;
-
-        int[] inputStrides = new int[spatialDims];
-
-        // Output size per spatial axis: input_dim - kernel_dim + 1
-        for (int i = 2; i < length; i++)
-        {
-            shape[i] = t._shape[i] - kernel._shape[i] + 1;
-            outputSpatialSize *= shape[i];
-            kernelSpatialSize *= kernel._shape[i];
-            inputSpatialSize *= t._shape[i];
-        }
-
-        // Strides for converting a flat index into N-dimensional input coordinates
-        inputStrides[spatialDims - 1] = 1;
-        for (int i = spatialDims - 2; i >= 0; i--)
-            inputStrides[i] = inputStrides[i + 1] * t._shape[i + 2];
-
-        float[] result = new float[batches * outChannels * outputSpatialSize];
-
-        for (int b = 0; b < batches; b++)
-        {
-            for (int oc = 0; oc < outChannels; oc++)
-            {
-                int outBase = (b * outChannels + oc) * outputSpatialSize;
-
-                // j = output spatial position
-                for (int j = 0; j < outputSpatialSize; j++)
-                {
-                    float sum = 0;
-
-                    // Sum over input channels and kernel positions
-                    for (int ic = 0; ic < inChannels; ic++)
-                    {
-                        int inputBase = (b * inChannels + ic) * inputSpatialSize;
-                        int kernelBase = (oc * inChannels + ic) * kernelSpatialSize;
-
-                        for (int k = 0; k < kernelSpatialSize; k++)
-                        {
-                            int inputOffset = 0;
-                            int tmpOut = j;
-                            int tmpK = k;
-
-                            for (int d = spatialDims - 1; d >= 0; d--)
-                            {
-                                int oCoord = tmpOut % shape[d + 2];
-                                tmpOut /= shape[d + 2];
-                                int kCoord = tmpK % kernel._shape[d + 2];
-                                tmpK /= kernel._shape[d + 2];
-                                inputOffset += (oCoord + kCoord) * inputStrides[d];
-                            }
-
-                            sum += t._data[inputBase + inputOffset] * kernel._data[kernelBase + k];
-                        }
-                    }
-
-                    result[outBase + j] = sum;
-                }
-            }
-        }
-
-        Tensor o = new(result, shape, t, kernel);
-
-        o._backward = Backward;
-
-        return o;
-
-        void Backward()
-        {
-            for (int b = 0; b < batches; b++)
-            {
-                for (int oc = 0; oc < outChannels; oc++)
-                {
-                    int outBase = (b * outChannels + oc) * outputSpatialSize;
-
-                    for (int j = 0; j < outputSpatialSize; j++)
-                    {
-                        float grad = o._gradients[outBase + j];
-
-                        for (int ic = 0; ic < inChannels; ic++)
-                        {
-                            int inputBase = (b * inChannels + ic) * inputSpatialSize;
-                            int kernelBase = (oc * inChannels + ic) * kernelSpatialSize;
-
-                            for (int k = 0; k < kernelSpatialSize; k++)
-                            {
-                                int inputOffset = 0;
-                                int tmpOut = j;
-                                int tmpK = k;
-
-                                for (int d = spatialDims - 1; d >= 0; d--)
-                                {
-                                    int outCoord = tmpOut % shape[d + 2];
-                                    tmpOut /= shape[d + 2];
-                                    int kCoord = tmpK % kernel._shape[d + 2];
-                                    tmpK /= kernel._shape[d + 2];
-                                    inputOffset += (outCoord + kCoord) * inputStrides[d];
-                                }
-
-                                t._gradients[inputBase + inputOffset] += grad * kernel._data[kernelBase + k];
-                                kernel._gradients[kernelBase + k] += grad * t._data[inputBase + inputOffset];
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-
-    /// <summary>
-    /// Rectified Linear Unit
-    /// </summary>
-    /// <param name="t">tensor</param>
-    public static Tensor ReLU(Tensor t)
-    {
-        int len = t._data.Length;
-        
-        float[] result = new float[len];
-        
-        for (int i = 0; i < len; i++)
-            result[i] = Math.Max(t._data[i], 0);
-        
-        // copy _shape
-        Tensor o = new(result, t._shape.ToArray(), t);
-        
-        o._backward = Backward;
-
-        return o;
-
-        void Backward()
-        {
-            for (int i = 0; i < t._gradients.Length; i++)
-                t._gradients[i] += t._data[i] > 0 ? o._gradients[i] : 0;
-        }
-    }
-
-    /// <summary>
-    /// Hyperbolic tangent
-    /// </summary>
-    /// <param name="t">tensor</param>
-    public static Tensor TanH(Tensor t)
-    {
-        int len = t._data.Length;
-        float[] result = new float[len];
-
-        for (int i = 0; i < len; i++)
-            result[i] = MathF.Tanh(t._data[i]);
-        
-        Tensor o = new(result, t._shape.ToArray(), t);
-        
-        o._backward = Backward;
-
-        return o;
-
-        void Backward()
-        {
-            for (int i = 0; i < len; i++)
-            {
-                float v = o._data[i];
-                t._gradients[i] += (1 - v * v) * o._gradients[i];
-            }
-        }
-    }
-    
-    /// <summary>
-    /// Mean square error
-    /// </summary>
-    /// <param name="p">prediction</param>
-    /// <param name="gt">ground truth</param>
-    /// <exception cref="TensorDimensionException">Dimension mismatch</exception>
-    // ReSharper disable once InconsistentNaming
-    public static Tensor MSE(Tensor p, Tensor gt)
-    {
-        if (gt._data.Length != p._data.Length)
-            throw new TensorDimensionException("Dimensions do not match.");
-
-        float mean = 0;
-        int len = p._data.Length;
-        
-        for (int i = 0; i < len; i++)
-        {
-            float pv = p._data[i];
-            float gtv = gt._data[i];
-
-            mean += MathF.Pow(pv - gtv, 2);
-        }
-
-        Tensor o = new([mean / len], [1], p, gt);
-        
-        o._backward = Backward;
-
-        return o;
-
-        void Backward()
-        {
-            float scale = o._gradients[0] * 2f / len;
-    
-            for (int i = 0; i < len; i++)
-            {
-                float diff = p._data[i] - gt._data[i];
-                p._gradients[i] += scale * diff;
-                gt._gradients[i] -= scale * diff;
-            }
-        }
-    }
-
-    /// <summary>
-    /// Backpropagation
+    /// Propagates an all-ones upstream gradient through the recorded graph.
+    /// For a non-scalar root this is equivalent to differentiating its sum.
     /// </summary>
     public void Backward()
     {
-        List<Tensor> topo = [];
+        List<Tensor> topologicalOrder = [];
         HashSet<Tensor> visited = [];
-        
-        TopoSort(this);
-        
-        for (int i = 0; i < _gradients.Length; i++)
-            _gradients[i] = 1;
-        
-        for (int i = topo.Count - 1; i >= 0; i--)
-            topo[i]._backward?.Invoke();
+
+        Visit(this);
+
+        Array.Fill(_gradients, 1f);
+
+        for (int i = topologicalOrder.Count - 1; i >= 0; i--)
+            topologicalOrder[i]._backward?.Invoke();
 
         return;
-        
-        // topologic sort
-        void TopoSort(Tensor value)
+
+        void Visit(Tensor tensor)
         {
-            if (!visited.Add(value)) 
+            if (!visited.Add(tensor))
                 return;
-            
-            foreach (Tensor leaf in value._leaves)
-                TopoSort(leaf);
-            
-            topo.Add(value);
+
+            foreach (Tensor parent in tensor._parents)
+                Visit(parent);
+
+            topologicalOrder.Add(tensor);
         }
     }
-    
+
     /// <summary>
-    /// Adjust values according to gradients
+    /// Applies a gradient-descent update to this tensor.
     /// </summary>
     public void Adjust(float rate)
     {
@@ -898,20 +122,16 @@ public class Tensor
     }
 
     /// <summary>
-    /// Zero out gradients
+    /// Clears all accumulated gradients.
     /// </summary>
     public void Zero()
     {
-        for (int i = 0; i < _gradients.Length; i++)
-            _gradients[i] = 0;
+        Array.Clear(_gradients);
     }
 
-    // Copy tensor data
     public float[] GetData() => _data.ToArray();
 
-    // Copy tensor gradients
     public float[] GetGradients() => _gradients.ToArray();
 
-    // Copy tensor shape
     public int[] GetShape() => _shape.ToArray();
 }

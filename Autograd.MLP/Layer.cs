@@ -28,6 +28,8 @@ public class Layer
     /// </summary>
     public int OutputSize { get; }
 
+    public int ParameterCount => _w.ElementCount + _b.ElementCount;
+
     public Layer(int inputSize, int outputSize, Random random, ActivationType? activation)
     {
         _activation = activation;

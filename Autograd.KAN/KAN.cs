@@ -15,6 +15,8 @@ public class KAN
     private readonly List<IKANLayer> _layers;
     private readonly Random _random;
 
+    public int ParameterCount => _layers.Sum(layer => layer.ParameterCount);
+
     private KAN(int inputSize, Random random)
     {
         _inputSize = inputSize;

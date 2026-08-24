@@ -27,6 +27,8 @@ public class PolynomialLayer : IKANLayer
     /// </summary>
     private readonly int _outputSize;
 
+    public int ParameterCount => _c.ElementCount + _b.ElementCount;
+
     public PolynomialLayer(int inputSize, int outputSize, BasisType basis, int[] degrees, Random random)
     {
         ArgumentNullException.ThrowIfNull(degrees);

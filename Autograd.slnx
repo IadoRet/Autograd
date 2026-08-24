@@ -1,10 +1,12 @@
 <Solution>
   <Folder Name="/Tests/">
     <Project Path="Autograd.Engine.Tests/Autograd.Engine.Tests.csproj" />
+    <Project Path="Autograd.Research.Tests/Autograd.Research.Tests.csproj" />
   </Folder>
   <Project Path="Autograd.CNN/Autograd.CNN.csproj" />
   <Project Path="Autograd.Engine/Autograd.Engine.csproj" />
   <Project Path="Autograd.KAN/Autograd.KAN.csproj" />
   <Project Path="Autograd.MLP/Autograd.MLP.csproj" />
+  <Project Path="Autograd.Research/Autograd.Research.csproj" />
   <Project Path="Autograd/Autograd.csproj" />
 </Solution>

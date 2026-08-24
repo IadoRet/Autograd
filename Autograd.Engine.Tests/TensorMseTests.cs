@@ -49,4 +49,19 @@ public class TensorMseTests
 
         Assert.Throws<TensorDimensionException>(() => Tensor.MSE(p, gt));
     }
+
+    [Fact]
+    public void MSE_SameElementCountButDifferentShape_ThrowsTensorDimensionException()
+    {
+        var p = new Tensor([1f, 2f, 3f, 4f], [2, 2]);
+        var gt = new Tensor([1f, 2f, 3f, 4f], [4]);
+
+        Assert.Throws<TensorDimensionException>(() => Tensor.MSE(p, gt));
+    }
+
+    [Fact]
+    public void MSE_EmptyTensors_ThrowsTensorDimensionException()
+    {
+        Assert.Throws<TensorDimensionException>(() => Tensor.MSE(Tensor.Empty, Tensor.Empty));
+    }
 }

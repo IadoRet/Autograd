@@ -80,7 +80,16 @@ public class TensorMatMulTests
     public void MatMul_BatchDimensionMismatch_ThrowsTensorDimensionException()
     {
         var a = new Tensor(new float[8], [2, 2, 2]);
-        var b = new Tensor(new float[8], [3, 2, 2]);
+        var b = new Tensor(new float[12], [3, 2, 2]);
+
+        Assert.Throws<TensorDimensionException>(() => _ = a * b);
+    }
+
+    [Fact]
+    public void MatMul_RankLessThanTwo_ThrowsTensorDimensionException()
+    {
+        var a = new Tensor([1f, 2f], [2]);
+        var b = new Tensor([1f, 2f], [2]);
 
         Assert.Throws<TensorDimensionException>(() => _ = a * b);
     }
